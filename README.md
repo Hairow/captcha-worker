@@ -9,7 +9,7 @@ captcha-worker/
 ├── src/index.js         # API 路由（原生 Worker fetch）
 ├── src/token.js         # HMAC token 签名与校验
 ├── src/turnstile.js     # Cloudflare Turnstile 服务端校验
-├── wrangler.toml        # Worker 配置（含 assets 静态资源托管）
+├── wrangler.jsonc       # Worker 配置（含 assets 静态资源托管）
 ├── public/              # 前端静态资源（无需构建，直接部署）
 │   ├── index.html       # 首页（需登录）
 │   ├── login.html       # 登录页
@@ -64,7 +64,7 @@ npm run dev
 > token 5 分钟有效且单次使用（自带防重放）。
 
 > `.dev.vars` 中还可配置 `JWT_SECRET`、`ADMIN_USERNAME`、`ADMIN_PASSWORD` 等本地开发变量；
-> 敏感变量不要写在 `wrangler.toml`（会被提交），统一放 `.dev.vars`（本地）/ `wrangler secret put`（生产）。
+> 敏感变量不要写在 `wrangler.jsonc`（会被提交），统一放 `.dev.vars`（本地）/ `wrangler secret put`（生产）。
 
 ## API 接口
 
@@ -97,4 +97,4 @@ npm run deploy
 
 - 添加 API 路由：在 `src/index.js` 的 `fetch` 中新增 `path` 判断分支。
 - 添加静态文件：直接放入 `public/` 目录。
-- 绑定 KV / D1：在 `wrangler.toml` 中按注释示例配置。
+- 绑定 KV / D1：在 `wrangler.jsonc` 中按注释示例配置。
