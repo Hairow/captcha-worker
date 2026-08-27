@@ -7,8 +7,11 @@
   <!-- Turnstile Site Key（公开信息，可直接写在此处；留空则登录页不显示验证码）
          当前为官方测试 key（永远通过），上线前替换为你自己的 Site Key -->
   <meta name="turnstile-site-key" content="0x4AAAAAAEdk0pDZM0WnqNlK" />
+  <!-- 固定使用不可见模式（静默后台验证），需与 Turnstile 后台「小组件模式」一致（Invisible） -->
   <title>登录 · Captcha Worker</title>
   <link rel="stylesheet" href="/style.css" />
+  <!-- Turnstile 官方脚本，显式渲染模式（render=explicit），由 login.js 控制渲染 -->
+  <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
   <script type="module" src="/login.js"></script>
 </head>
 
