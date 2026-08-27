@@ -1,13 +1,13 @@
 /**
  * login.js —— 登录页逻辑
  *
- * 流程：读取 Turnstile Site Key（HTML meta）→ 静默后台验证（不可见模式）→
+ * 流程：读取 Turnstile Site Key（HTML meta）→ 静默后台验证（非交互式）→
  *       提交账号密码 + 验证 token 到 /api/login → 成功存 token 跳转首页。
  *
  * 关键约定：
  *  - Turnstile 官方脚本在 login.html 中以 <script> 静态引入（render=explicit）。
- *  - 固定不可见模式（execution: 'execute'），需与 Turnstile 后台
- *    「小组件模式」设置为 Invisible 保持一致。
+ *  - 使用 execution: 'execute' 手动触发，兼容后台「小组件模式」的
+ *    Non-interactive（非交互式，显示小 spinner）与 Invisible（不可见，无感知）。
  *  - Site Key 是公开信息写在 HTML meta；Secret Key 在服务端（.dev.vars）。
  */
 
@@ -50,7 +50,8 @@ function initTurnstile() {
   if (!siteKey) return // 未配置则跳过（演示模式）
 
   ensureTurnstile(() => {
-    // 显式渲染到容器；execution: 'execute' = 不可见模式，不显示勾选框
+    // 显式渲染到容器；execution: 'execute' = 非交互式，不显示勾选框，
+    // 仅在页面角落显示小 spinner，验证自动完成
     window.turnstile.render(turnstileEl, {
       sitekey: siteKey,
       execution: 'execute',
