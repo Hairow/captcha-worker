@@ -1,13 +1,15 @@
 /**
  * login.js —— 登录页逻辑
  *
- * 流程：读取 Turnstile Site Key（HTML meta）→ 静默后台验证（非交互式）→
- *       提交账号密码 + 验证 token 到 /api/login → 成功存 token 跳转首页。
+ * 流程：读取 Turnstile Site Key（HTML meta）→ 用 turnstile.render() 显式渲染勾选框
+ *       （托管模式）→ 用户点击勾选通过后拿到 token → 提交账号密码 + token 到
+ *       /api/login → 成功存 token 跳转首页。
  *
  * 关键约定：
- *  - Turnstile 官方脚本在 login.html 中以 <script> 静态引入（render=explicit）。
- *  - 使用 execution: 'execute' 手动触发，兼容后台「小组件模式」的
- *    Non-interactive（非交互式，显示小 spinner）与 Invisible（不可见，无感知）。
+ *  - Turnstile 官方脚本在 login.html 中以 <script> 静态引入（?render=explicit，
+ *    显式模式：禁用自动渲染，渲染时机与参数完全由本文件控制）。
+ *  - 托管模式（Managed）：渲染勾选框由用户点击，需与 Turnstile 后台
+ *    「小组件模式」设置为 Managed 保持一致。
  *  - Site Key 是公开信息写在 HTML meta；Secret Key 在服务端（.dev.vars）。
  */
 
@@ -50,18 +52,16 @@ function initTurnstile() {
   if (!siteKey) return // 未配置则跳过（演示模式）
 
   ensureTurnstile(() => {
-    // 显式渲染到容器；execution: 'execute' = 非交互式，不显示勾选框，
-    // 仅在页面角落显示小 spinner，验证自动完成
+    // 托管模式：显式渲染勾选框，用户点击后由 callback 拿到 token
     window.turnstile.render(turnstileEl, {
       sitekey: siteKey,
-      execution: 'execute',
       // 验证通过：拿到一次性 token，随表单提交给服务端 siteverify
       callback: (token) => {
         turnstileToken = token
         errorEl.hidden = true
         console.log('[Turnstile] 人机验证通过', { token, at: new Date().toISOString() })
       },
-      // token 过期（约 5 分钟）：清空，提交时会重新触发验证
+      // token 过期（约 5 分钟）：清空，提交时会提示用户重新验证
       'expired-callback': () => {
         turnstileToken = null
       },
@@ -70,28 +70,10 @@ function initTurnstile() {
         turnstileToken = null
       },
     })
-    // 页面加载即自动发起静默验证（不可见模式）
-    window.turnstile.execute(turnstileEl)
   })
 }
 
 initTurnstile()
-
-// 等待 token 产生（不可见模式下验证是异步的），带超时避免一直卡住
-function requestTurnstileToken(timeout = 30000) {
-  return new Promise((resolve, reject) => {
-    const start = Date.now()
-    const timer = setInterval(() => {
-      if (turnstileToken) {
-        clearInterval(timer)
-        resolve(turnstileToken)
-      } else if (Date.now() - start > timeout) {
-        clearInterval(timer)
-        reject(new Error('人机验证超时，请重试'))
-      }
-    }, 100)
-  })
-}
 
 // ---- 登录提交 ----
 form.addEventListener('submit', async (e) => {
@@ -107,16 +89,11 @@ form.addEventListener('submit', async (e) => {
     return
   }
 
-  // 提交前确保已拿到 Turnstile token；没有则触发一次静默验证并等待结果
-  if (!turnstileToken && window.turnstile) {
-    window.turnstile.execute(turnstileEl)
-    try {
-      turnstileToken = await requestTurnstileToken()
-    } catch (err) {
-      errorEl.textContent = err.message
-      errorEl.hidden = false
-      return
-    }
+  // 提交前校验 Turnstile：勾选框已渲染但用户未点击通过时拦截
+  if (turnstileEl.innerHTML && !turnstileToken) {
+    errorEl.textContent = '请先完成人机验证'
+    errorEl.hidden = false
+    return
   }
 
   // 提交中 UI 状态
@@ -134,11 +111,10 @@ form.addEventListener('submit', async (e) => {
     const data = await res.json()
 
     if (!res.ok) {
-      // 验证码过期或失效（403），重置 widget 并重新触发静默验证
+      // 验证码过期或失效（403），重置勾选框让用户重新点击验证
       if (res.status === 403 && window.turnstile) {
-        window.turnstile.reset()
+        window.turnstile.reset(turnstileEl)
         turnstileToken = null
-        window.turnstile.execute(turnstileEl)
       }
       // 附带 Turnstile 具体错误码（如 invalid-input-response），方便排查
       const codes = data.errorCodes?.length ? `（${data.errorCodes.join(', ')}）` : ''
