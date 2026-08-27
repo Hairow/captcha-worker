@@ -79,7 +79,9 @@ form.addEventListener('submit', async (e) => {
         window.turnstile.reset()
         turnstileToken = null
       }
-      throw new Error(data.error ?? '登录失败')
+      // 附带 Turnstile 具体错误码，方便排查
+      const codes = data.errorCodes?.length ? `（${data.errorCodes.join(', ')}）` : ''
+      throw new Error(`${data.error ?? '登录失败'}${codes}`)
     }
 
     localStorage.setItem('token', data.token)

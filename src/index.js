@@ -51,7 +51,15 @@ export default {
       // Turnstile 人机验证
       const turnstile = await verifyTurnstile(env, body?.cfTurnstileToken, request)
       if (!turnstile.success) {
-        return json({ error: '人机验证失败，请重试' }, 403)
+        // 附带具体错误码，便于前端展示与排查（如 invalid-input-secret / timeout-or-duplicate）
+        return json(
+          {
+            error: '人机验证失败，请重试',
+            turnstileError: turnstile.error,
+            errorCodes: turnstile.errorCodes ?? [],
+          },
+          403
+        )
       }
 
       // 允许通过 env 覆盖管理员密码：ADMIN_PASSWORD / ADMIN_USERNAME

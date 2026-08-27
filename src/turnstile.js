@@ -42,8 +42,8 @@ export async function verifyTurnstile(env, token, request) {
     .map((s) => s.trim())
     .filter(Boolean)
   if (allowed.length && data.hostname && !allowed.includes(data.hostname)) {
-    return { success: false, error: 'hostname-mismatch' }
+    return { success: false, error: 'hostname-mismatch', errorCodes: ['hostname-mismatch'] }
   }
 
-  return { success: !!data.success, errorCodes: data['error-codes'] }
+  return { success: !!data.success, errorCodes: data['error-codes'] ?? [] }
 }
