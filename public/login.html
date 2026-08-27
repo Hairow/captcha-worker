@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- Turnstile Site Key（公开信息，可直接写在此处；留空则登录页不显示验证码） -->
+    <meta name="turnstile-site-key" content="" />
+    <title>登录 · Captcha Worker</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script type="module" src="/login.js"></script>
+  </head>
+  <body class="login-body">
+    <main class="login-card">
+      <div class="login-logo">🔐</div>
+      <h1 class="login-title">登录</h1>
+      <p class="login-subtitle">Cloudflare Worker 演示后台</p>
+
+      <form id="login-form" novalidate>
+        <label class="field">
+          <span>用户名</span>
+          <input id="username" type="text" name="username" placeholder="admin / demo" autocomplete="username" required />
+        </label>
+        <label class="field">
+          <span>密码</span>
+          <input id="password" type="password" name="password" placeholder="••••••••" autocomplete="current-password" required />
+        </label>
+
+        <div id="turnstile-container" class="turnstile-wrap"></div>
+
+        <p id="login-error" class="login-error" hidden></p>
+
+        <button id="btn-login" type="submit" class="primary full">登 录</button>
+      </form>
+
+      <p class="login-hint">演示账号：admin / admin123 · demo / demo123</p>
+      <a class="login-back" href="/">← 返回首页</a>
+    </main>
+  </body>
+</html>
