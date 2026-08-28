@@ -1,56 +1,67 @@
 <!doctype html>
 <html lang="zh-CN">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Captcha Worker · 前端演示</title>
-    <link rel="stylesheet" href="/style.css" />
-    <script type="module" src="/main.js"></script>
-  </head>
-  <body>
-    <main class="container">
-      <header class="hero">
-        <div class="topbar">
-          <span class="badge" id="api-status">正在连接 API…</span>
-          <div class="userbox" id="userbox" hidden>
-            <span id="user-info"></span>
-            <button id="btn-logout" class="ghost">退出登录</button>
-          </div>
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Captcha Worker · 前端演示</title>
+  <!-- 登录守卫（同步内联脚本）：在 body 渲染前执行，未登录立即跳转，避免页面闪现。
+       必须放在 main.js（module，defer 执行）之前 —— module 脚本要等 DOM 解析完才跑，
+       那时页面已经渲染出来了 -->
+  <script>
+    if (!localStorage.getItem('token')) {
+      location.replace('/login.html')
+    }
+  </script>
+  <link rel="stylesheet" href="./style.css" />
+  <script type="module" src="./main.js"></script>
+</head>
+
+<body>
+  <main class="container">
+    <header class="hero">
+      <div class="topbar">
+        <span class="badge" id="api-status">正在连接 API…</span>
+        <div class="userbox" id="userbox" hidden>
+          <span id="user-info"></span>
+          <button id="btn-logout" class="ghost">退出登录</button>
         </div>
-        <h1>Cloudflare Worker <span class="accent">前端 + API</span></h1>
-        <p class="subtitle">前端静态资源由 Worker 直接托管，后端运行在边缘网络</p>
-      </header>
+      </div>
+      <h1>Cloudflare Worker <span class="accent">前端 + API</span></h1>
+      <p class="subtitle">前端静态资源由 Worker 直接托管，后端运行在边缘网络</p>
+    </header>
 
-      <section class="grid">
-        <article class="card">
-          <h2>👋 打招呼</h2>
-          <div class="row">
-            <input id="name-input" type="text" placeholder="输入你的名字" value="CodeBuddy" />
-            <button id="btn-hello" class="primary">发送</button>
-          </div>
-          <pre id="output-hello" class="output">—</pre>
-        </article>
+    <section class="grid">
+      <article class="card">
+        <h2>👋 打招呼</h2>
+        <div class="row">
+          <input id="name-input" type="text" placeholder="输入你的名字" value="CodeBuddy" />
+          <button id="btn-hello" class="primary">发送</button>
+        </div>
+        <pre id="output-hello" class="output">—</pre>
+      </article>
 
-        <article class="card">
-          <h2>🕒 服务器时间</h2>
-          <p class="desc">查询边缘节点返回的当前时间与地区</p>
-          <button id="btn-time" class="primary">获取时间</button>
-          <pre id="output-time" class="output">—</pre>
-        </article>
+      <article class="card">
+        <h2>🕒 服务器时间</h2>
+        <p class="desc">查询边缘节点返回的当前时间与地区</p>
+        <button id="btn-time" class="primary">获取时间</button>
+        <pre id="output-time" class="output">—</pre>
+      </article>
 
-        <article class="card wide">
-          <h2>📡 数据回显</h2>
-          <div class="row">
-            <input id="echo-input" type="text" placeholder="输入要回显的内容" value="Hello from the edge!" />
-            <button id="btn-echo" class="primary">POST</button>
-          </div>
-          <pre id="output-echo" class="output">—</pre>
-        </article>
-      </section>
+      <article class="card wide">
+        <h2>📡 数据回显</h2>
+        <div class="row">
+          <input id="echo-input" type="text" placeholder="输入要回显的内容" value="Hello from the edge!" />
+          <button id="btn-echo" class="primary">POST</button>
+        </div>
+        <pre id="output-echo" class="output">—</pre>
+      </article>
+    </section>
 
-      <footer>
-        <p>本地开发：<code>npm run dev</code>，然后访问 <code>http://localhost:8787</code></p>
-      </footer>
-    </main>
-  </body>
+    <footer>
+      <p>本地开发：<code>npm run dev</code>，然后访问 <code>http://localhost:8787</code></p>
+    </footer>
+  </main>
+</body>
+
 </html>

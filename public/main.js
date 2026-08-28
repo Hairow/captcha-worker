@@ -11,9 +11,9 @@ async function api(path, options = {}) {
   return res.json()
 }
 
-// ---- 登录检查 ----
+// ---- 登录检查（守卫已提前到 index.html 内联脚本，这里兜底：token 失效/过期时同样跳转） ----
 if (!token) {
-  location.href = '/login.html'
+  location.replace('/login.html')
 }
 
 const statusEl = $('#api-status')
@@ -30,7 +30,7 @@ try {
 } catch {
   localStorage.removeItem('token')
   localStorage.removeItem('user')
-  location.href = '/login.html'
+  location.replace('/login.html')
 }
 
 // ---- 退出登录 ----
