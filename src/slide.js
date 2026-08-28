@@ -130,10 +130,10 @@ export function verifySlide(body) {
     return { success: false, message: '验证码已过期，请重试' }
   }
 
-  // ---- 2. 位置校验（位置为王：容差 5px） ----
+  // ---- 2. 位置校验（位置为王：容差 5px，不向客户端暴露偏差值） ----
   const diff = Math.abs((x ?? 0) - rec.targetX)
   if (diff > TOLERANCE) {
-    return { success: false, message: `滑块位置未对准（偏差 ${Math.round(diff)}px）` }
+    return { success: false, message: '滑块位置未对准，请重试' }
   }
 
   // ---- 3. 硬性拦截（绝对规则，大概率是脚本） ----
