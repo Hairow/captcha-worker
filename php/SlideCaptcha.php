@@ -286,8 +286,8 @@ class SlideCaptcha
     /** 校验：uuid 一次性 + 位置容差 + 轨迹硬性拦截 + 行为评分（公式与 JS 版一致） */
     public function verify(array $body): array
     {
+        // 最终位置由服务端从轨迹最后一点读取，前端不提交 x/y
         $uuid = $body['uuid'] ?? null;
-        $x = $body['x'] ?? 0;
         $track = $body['track'] ?? null;
         $duration = $body['duration'] ?? 0;
 
@@ -301,13 +301,8 @@ class SlideCaptcha
         }
         $this->kvDelete($uuid); // 一次性：无论成败都消费掉，防重放
 
-        // ---- 2. 位置校验（位置为王：容差 5px，不向客户端暴露偏差值） ----
-        $diff = abs((float) $x - $rec['targetX']);
-        if ($diff > self::TOLERANCE) {
-            return ['success' => false, 'message' => '滑块位置未对准，请重试'];
-        }
-
-        // ---- 3. 硬性拦截（绝对规则，大概率是脚本） ----
+        // ---- 2. 硬性拦截（绝对规则，大概率是脚本） ----
+        // 位置取自轨迹终点，必须先确保轨迹本身合法
         if (!is_array($track) || count($track) < 10) {
             return ['success' => false, 'message' => '轨迹点数太少，疑似脚本注入'];
         }
@@ -320,6 +315,19 @@ class SlideCaptcha
         // 轨迹应从滑块起点附近开始（防"只提交终点坐标"）
         if (abs($track[0]['x'] ?? 0) > 10) {
             return ['success' => false, 'message' => '轨迹起点异常，请从滑块处开始拖动'];
+        }
+        // 时间必须单调递增（pointer 事件天然有序，乱序说明被篡改/反转）
+        for ($i = 1; $i < count($track); $i++) {
+            if (($track[$i]['t'] ?? 0) < ($track[$i - 1]['t'] ?? 0)) {
+                return ['success' => false, 'message' => '轨迹时间异常，疑似脚本注入'];
+            }
+        }
+
+        // ---- 3. 位置校验（位置为王：容差 5px，不向客户端暴露偏差值） ----
+        // 最终位置取轨迹最后一点，前端不再单独提交 x/y，轨迹与位置天然绑定
+        $lastX = (float) ($track[count($track) - 1]['x'] ?? 0);
+        if (abs($lastX - $rec['targetX']) > self::TOLERANCE) {
+            return ['success' => false, 'message' => '滑块位置未对准，请重试'];
         }
 
         // ---- 4. 行为评分（低误杀策略：位置命中给基础分，特征有则加分、无则给基础分） ----

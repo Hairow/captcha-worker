@@ -149,7 +149,9 @@ export async function generateSlide(env) {
 }
 
 export async function verifySlide(body, env) {
-  const { uuid, x, y, track, duration } = body ?? {}
+  // 最终位置由服务端从轨迹最后一点读取，前端不提交 x/y
+  // （y 不参与验证，targetY 仅用于前端定位拼图块）
+  const { uuid, track, duration } = body ?? {}
 
   // ---- 1. uuid 校验（一次性 + 未过期） ----
   if (!uuid) {
@@ -170,13 +172,8 @@ export async function verifySlide(body, env) {
     return { success: false, message: '验证码已过期，请重试' }
   }
 
-  // ---- 2. 位置校验（位置为王：容差 5px，不向客户端暴露偏差值） ----
-  const diff = Math.abs((x ?? 0) - rec.targetX)
-  if (diff > TOLERANCE) {
-    return { success: false, message: '滑块位置未对准，请重试' }
-  }
-
-  // ---- 3. 硬性拦截（绝对规则，大概率是脚本） ----
+  // ---- 2. 硬性拦截（绝对规则，大概率是脚本） ----
+  // 位置取自轨迹终点，必须先确保轨迹本身合法
   if (!Array.isArray(track) || track.length < 10) {
     return { success: false, message: '轨迹点数太少，疑似脚本注入' }
   }
@@ -189,6 +186,20 @@ export async function verifySlide(body, env) {
   // 轨迹应从滑块起点附近开始（防"只提交终点坐标"）
   if (Math.abs(track[0].x) > 10) {
     return { success: false, message: '轨迹起点异常，请从滑块处开始拖动' }
+  }
+  // 时间必须单调递增（pointer 事件天然有序，乱序说明被篡改/反转）
+  for (let i = 1; i < track.length; i++) {
+    if (track[i].t < track[i - 1].t) {
+      return { success: false, message: '轨迹时间异常，疑似脚本注入' }
+    }
+  }
+
+  // ---- 3. 位置校验（位置为王：容差 5px，不向客户端暴露偏差值） ----
+  // 最终位置取轨迹最后一点，前端不再单独提交 x/y，轨迹与位置天然绑定，
+  // 杜绝"提交正确坐标 + 伪造假轨迹"的注入方式
+  const lastX = track[track.length - 1].x
+  if (Math.abs(lastX - rec.targetX) > TOLERANCE) {
+    return { success: false, message: '滑块位置未对准，请重试' }
   }
 
   // ---- 4. 行为评分（低误杀策略：位置命中给基础分，特征有则加分、无则给基础分） ----

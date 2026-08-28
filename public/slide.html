@@ -294,10 +294,10 @@
       result.className = ''
 
       const duration = track.length ? track[track.length - 1].t : 0
+      // 不再单独提交 x/y：最终位置由服务端从轨迹最后一点读取，
+      // 位置必须由轨迹承载，杜绝"提交正确坐标 + 伪造轨迹"的注入
       const body = {
         uuid,
-        x: offsetX,
-        y: track.length ? track[track.length - 1].y : 0,
         track,
         duration,
       }
