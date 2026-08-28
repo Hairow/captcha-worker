@@ -2,7 +2,23 @@ import { describe, it, expect, afterEach, vi } from 'vitest'
 import worker from '../src/index.js'
 import { generateSlide } from '../src/slide.js'
 
-const ENV = { API_NAME: 'test-worker', JWT_SECRET: 'test-secret' }
+// 内存版 KV mock（模拟 Workers KV 的 get/put/delete）
+function mockKV() {
+  const store = new Map()
+  return {
+    async get(key) {
+      return store.has(key) ? store.get(key) : null
+    },
+    async put(key, value) {
+      store.set(key, value)
+    },
+    async delete(key) {
+      store.delete(key)
+    },
+  }
+}
+
+const ENV = { API_NAME: 'test-worker', JWT_SECRET: 'test-secret', SLIDE_KV: mockKV() }
 
 function request(path, init, env = ENV) {
   return worker.fetch(new Request(`https://example.com${path}`, init), env)
@@ -144,17 +160,17 @@ describe('滑动验证码 API', () => {
     expect(data.targetY).toBeUndefined()
   })
 
-  it('拼图块使用背景坐标裁剪 + 内容平移，图案与缺口严格一致', () => {
-    const gen = generateSlide()
+  it('拼图块使用背景坐标裁剪 + 内容平移，图案与缺口严格一致', async () => {
+    const gen = await generateSlide(ENV)
     // clip 矩形必须用背景坐标系坐标，才能在本地空间抠出缺口区域
     expect(gen.puzzle).toContain(`<rect x="${gen.targetX}" y="${gen.targetY}" width="40" height="40" rx="4"/>`)
     // 裁剪后的内容整体平移到 0~40 画布内
     expect(gen.puzzle).toContain(`transform="translate(${-gen.targetX} ${-gen.targetY})"`)
   })
 
-  it('缺口水平位置集中在中间偏右范围（100~200px）', () => {
+  it('缺口水平位置集中在中间偏右范围（100~200px）', async () => {
     for (let i = 0; i < 50; i++) {
-      const gen = generateSlide()
+      const gen = await generateSlide(ENV)
       expect(gen.targetX).toBeGreaterThanOrEqual(100)
       expect(gen.targetX).toBeLessThanOrEqual(200)
     }
@@ -174,7 +190,7 @@ describe('滑动验证码 API', () => {
 
   it('POST /api/slide/verify 位置对准 + 正常轨迹通过', async () => {
     // 坐标直接取模块（服务端内部使用），模拟"知道正确位置"的客户端
-    const gen = generateSlide()
+    const gen = await generateSlide(ENV)
     const { track, duration } = humanTrack(gen.targetX)
     const res = await request('/api/slide/verify', {
       method: 'POST',
@@ -186,7 +202,7 @@ describe('滑动验证码 API', () => {
   })
 
   it('POST /api/slide/verify 位置偏差过大被拒', async () => {
-    const gen = generateSlide()
+    const gen = await generateSlide(ENV)
     const { track, duration } = humanTrack(gen.targetX)
     const res = await request('/api/slide/verify', {
       method: 'POST',
@@ -198,7 +214,7 @@ describe('滑动验证码 API', () => {
   })
 
   it('POST /api/slide/verify 轨迹点数过少被拒', async () => {
-    const gen = generateSlide()
+    const gen = await generateSlide(ENV)
     const res = await request('/api/slide/verify', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -209,7 +225,7 @@ describe('滑动验证码 API', () => {
   })
 
   it('POST /api/slide/verify token 一次性：验证后重复使用被拒', async () => {
-    const gen = generateSlide()
+    const gen = await generateSlide(ENV)
     const { track, duration } = humanTrack(gen.targetX)
     const body = {
       method: 'POST',

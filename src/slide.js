@@ -7,18 +7,17 @@
 // 背景图与拼图块共用同一组随机形状：背景图上在缺口处画半透明遮罩表示"洞"，
 // 拼图块用 clipPath 抠出缺口区域的形状，保证图案与背景严格一致。
 //
-// 存储说明：token 与缺口位置绑定存放在内存 Map（5 分钟 TTL，一次性消费）。
-// 单实例/演示场景够用；生产多实例部署时建议改用 KV 存储（wrangler kv namespace）。
+// 存储说明：token 与缺口位置绑定存放在 KV（5 分钟 TTL，一次性消费）。
+// KV 天然跨实例共享、按 TTL 自动过期，生产多实例部署无需额外处理。
+// 本地 wrangler dev 自动使用本地 KV 模拟；单元测试传入内存 mock 即可。
 
 const PUZZLE_SIZE = 40 // 拼图块尺寸（与前端保持一致）
 const BG_W = 300 // 画布宽
 const BG_H = 150 // 画布高
 const TTL_MS = 5 * 60 * 1000 // token 有效期
+const TTL_S = TTL_MS / 1000 // KV expirationTtl（秒）
 const TOLERANCE = 5 // 滑块终点允许的偏差（px）
 const PASS_SCORE = 60 // 通过分数线
-
-// token -> { targetX, targetY, exp }
-const STORE = new Map()
 
 const fmt = (n) => +n.toFixed(1)
 
@@ -88,13 +87,7 @@ function buildPuzzle(parts, targetX, targetY) {
 </svg>`
 }
 
-export function generateSlide() {
-  const now = Date.now()
-  // 顺手清理过期 token，避免 Map 无限增长
-  for (const [k, v] of STORE) {
-    if (v.exp < now) STORE.delete(k)
-  }
-
+export async function generateSlide(env) {
   // 缺口位置：水平方向集中在中间偏右区域（100~200px，画布宽 300），
   // 垂直方向随机并留出安全边距
   const targetX = Math.floor(Math.random() * 101) + 100
@@ -102,7 +95,12 @@ export function generateSlide() {
   const token = randomToken()
 
   const parts = buildShapes()
-  STORE.set(token, { targetX, targetY, exp: now + TTL_MS })
+  // token -> 缺口坐标写入 KV，TTL 到期由 KV 自动清理，无需手动扫过期
+  await env.SLIDE_KV.put(
+    token,
+    JSON.stringify({ targetX, targetY, exp: Date.now() + TTL_MS }),
+    { expirationTtl: TTL_S }
+  )
 
   return {
     token,
@@ -117,15 +115,24 @@ export function generateSlide() {
   }
 }
 
-export function verifySlide(body) {
+export async function verifySlide(body, env) {
   const { token, x, y, track, duration } = body ?? {}
 
   // ---- 1. token 校验（一次性 + 未过期） ----
-  const rec = STORE.get(token)
-  if (!rec) {
+  if (!token) {
     return { success: false, message: '验证码已失效，请重试' }
   }
-  STORE.delete(token) // 一次性：无论成败都消费掉，防重放
+  const raw = await env.SLIDE_KV.get(token)
+  if (!raw) {
+    return { success: false, message: '验证码已失效，请重试' }
+  }
+  await env.SLIDE_KV.delete(token) // 一次性：无论成败都消费掉，防重放
+  let rec
+  try {
+    rec = JSON.parse(raw)
+  } catch {
+    return { success: false, message: '验证码已失效，请重试' }
+  }
   if (rec.exp < Date.now()) {
     return { success: false, message: '验证码已过期，请重试' }
   }

@@ -8,6 +8,15 @@
     "not_found_handling": "single-page-application",
     "html_handling": "none"
   },
+  // KV：滑动验证码 token 存储（跨实例共享 + 按 TTL 自动过期）
+  // 创建命令：npx wrangler kv namespace create SLIDE_KV
+  // 然后把输出里的 id 填到下方；本地 wrangler dev 会用本地模拟，id 可先占位
+  "kv_namespaces": [
+    {
+      "binding": "SLIDE_KV",
+      "id": "captcha"
+    }
+  ],
   // 公开静态变量
   "vars": {
     "API_NAME": "captcha-worker-api"

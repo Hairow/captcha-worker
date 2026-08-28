@@ -117,7 +117,7 @@ export default {
 
     // 滑动验证码：生成两张 SVG 图片 + 一次性 token（GET）
     if (request.method === 'GET' && path === '/api/slide/generate') {
-      const data = generateSlide()
+      const data = await generateSlide(env)
       // 缺口水平坐标（targetX）是验证核心，绝不下发给客户端；
       // puzzleY 仅用于前端把拼图块放到与缺口相同的垂直位置（不参与验证）
       return json({
@@ -135,7 +135,7 @@ export default {
     // 滑动验证码：服务端校验位置与轨迹（POST）
     if (request.method === 'POST' && path === '/api/slide/verify') {
       const body = await request.json().catch(() => null)
-      return json(verifySlide(body))
+      return json(await verifySlide(body, env))
     }
 
     // 回显接口（POST JSON）
