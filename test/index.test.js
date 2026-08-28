@@ -152,6 +152,14 @@ describe('滑动验证码 API', () => {
     expect(gen.puzzle).toContain(`transform="translate(${-gen.targetX} ${-gen.targetY})"`)
   })
 
+  it('缺口水平位置集中在中间偏右范围（100~200px）', () => {
+    for (let i = 0; i < 50; i++) {
+      const gen = generateSlide()
+      expect(gen.targetX).toBeGreaterThanOrEqual(100)
+      expect(gen.targetX).toBeLessThanOrEqual(200)
+    }
+  })
+
   // 生成一段模拟真人轨迹：从 0 平滑逼近 targetX，带 y 抖动与停顿
   function humanTrack(targetX) {
     const track = []

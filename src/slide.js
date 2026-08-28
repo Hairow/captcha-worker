@@ -95,8 +95,9 @@ export function generateSlide() {
     if (v.exp < now) STORE.delete(k)
   }
 
-  // 缺口位置：左右留出安全边距
-  const targetX = Math.floor(Math.random() * (BG_W - PUZZLE_SIZE - 30)) + 15
+  // 缺口位置：水平方向集中在中间偏右区域（100~200px，画布宽 300），
+  // 垂直方向随机并留出安全边距
+  const targetX = Math.floor(Math.random() * 101) + 100
   const targetY = Math.floor(Math.random() * (BG_H - PUZZLE_SIZE - 20)) + 10
   const token = randomToken()
 
