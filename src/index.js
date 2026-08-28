@@ -1,5 +1,6 @@
 import { signToken, verifyToken, bearerToken } from './token.js'
 import { verifyTurnstile } from './turnstile.js'
+import { generateSlide, verifySlide } from './slide.js'
 
 const API_HEADERS = {
   'Content-Type': 'application/json; charset=utf-8',
@@ -114,6 +115,29 @@ export default {
       })
     }
 
+    // 滑动验证码：生成两张 SVG 图片 + 一次性 token（GET）
+    if (request.method === 'GET' && path === '/api/slide/generate') {
+      const data = generateSlide()
+      // 缺口水平坐标（targetX）是验证核心，绝不下发给客户端；
+      // puzzleY 仅用于前端把拼图块放到与缺口相同的垂直位置（不参与验证）
+      return json({
+        token: data.token,
+        background: data.background,
+        puzzle: data.puzzle,
+        width: data.width,
+        height: data.height,
+        puzzleSize: data.puzzleSize,
+        puzzleY: data.targetY,
+        expiresIn: data.expiresIn,
+      })
+    }
+
+    // 滑动验证码：服务端校验位置与轨迹（POST）
+    if (request.method === 'POST' && path === '/api/slide/verify') {
+      const body = await request.json().catch(() => null)
+      return json(verifySlide(body))
+    }
+
     // 回显接口（POST JSON）
     if (request.method === 'POST' && path === '/api/echo') {
       const body = await request.json().catch(() => null)
@@ -136,7 +160,7 @@ export default {
       {
         error: 'Not Found',
         path,
-        hint: 'Available routes: /api, /api/login, /api/me, /api/hello, /api/time, /api/echo',
+        hint: 'Available routes: /api, /api/login, /api/me, /api/hello, /api/time, /api/echo, /api/slide/generate, /api/slide/verify',
       },
       404
     )

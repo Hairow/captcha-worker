@@ -1,5 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest'
 import worker from '../src/index.js'
+import { generateSlide } from '../src/slide.js'
 
 const ENV = { API_NAME: 'test-worker', JWT_SECRET: 'test-secret' }
 
@@ -125,5 +126,83 @@ describe('API Worker', () => {
   it('未知 API 路由返回 404', async () => {
     const res = await request('/api/nothing')
     expect(res.status).toBe(404)
+  })
+})
+
+describe('滑动验证码 API', () => {
+  it('GET /api/slide/generate 返回两张 SVG 图片且不下发缺口坐标', async () => {
+    const res = await request('/api/slide/generate')
+    expect(res.status).toBe(200)
+    const data = await res.json()
+    expect(data.token).toBeTruthy()
+    expect(data.background).toContain('<svg')
+    expect(data.puzzle).toContain('<svg')
+    expect(data.puzzleSize).toBe(40)
+    expect(data.puzzleY).toBeGreaterThanOrEqual(0)
+    // 缺口水平坐标是验证核心，绝不下发
+    expect(data.targetX).toBeUndefined()
+    expect(data.targetY).toBeUndefined()
+  })
+
+  // 生成一段模拟真人轨迹：从 0 平滑逼近 targetX，带 y 抖动与停顿
+  function humanTrack(targetX) {
+    const track = []
+    let t = 0
+    for (let i = 0; i < 30; i++) {
+      const x = (targetX * i) / 29
+      t += i % 7 === 0 ? 120 : 20
+      track.push({ x: +x.toFixed(1), y: +(Math.sin(i * 1.3) * 3).toFixed(1), t })
+    }
+    return { track, duration: t }
+  }
+
+  it('POST /api/slide/verify 位置对准 + 正常轨迹通过', async () => {
+    // 坐标直接取模块（服务端内部使用），模拟"知道正确位置"的客户端
+    const gen = generateSlide()
+    const { track, duration } = humanTrack(gen.targetX)
+    const res = await request('/api/slide/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: gen.token, x: gen.targetX, y: 0, track, duration }),
+    })
+    const data = await res.json()
+    expect(data.success).toBe(true)
+  })
+
+  it('POST /api/slide/verify 位置偏差过大被拒', async () => {
+    const gen = generateSlide()
+    const { track, duration } = humanTrack(gen.targetX)
+    const res = await request('/api/slide/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: gen.token, x: gen.targetX + 20, y: 0, track, duration }),
+    })
+    const data = await res.json()
+    expect(data.success).toBe(false)
+  })
+
+  it('POST /api/slide/verify 轨迹点数过少被拒', async () => {
+    const gen = generateSlide()
+    const res = await request('/api/slide/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: gen.token, x: gen.targetX, y: 0, track: [{ x: 0, y: 0, t: 10 }], duration: 500 }),
+    })
+    const data = await res.json()
+    expect(data.success).toBe(false)
+  })
+
+  it('POST /api/slide/verify token 一次性：验证后重复使用被拒', async () => {
+    const gen = generateSlide()
+    const { track, duration } = humanTrack(gen.targetX)
+    const body = {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: gen.token, x: gen.targetX, y: 0, track, duration }),
+    }
+    await request('/api/slide/verify', body) // 第一次消费 token
+    const second = await request('/api/slide/verify', body) // 第二次必须失败
+    const data = await second.json()
+    expect(data.success).toBe(false)
   })
 })

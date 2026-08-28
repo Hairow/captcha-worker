@@ -9,12 +9,14 @@ captcha-worker/
 ├── src/index.js         # API 路由（原生 Worker fetch）
 ├── src/token.js         # HMAC token 签名与校验
 ├── src/turnstile.js     # Cloudflare Turnstile 服务端校验
+├── src/slide.js         # 滑动验证码（生成缺口位置/token + 服务端轨迹评分）
 ├── wrangler.jsonc       # Worker 配置（含 assets 静态资源托管）
 ├── public/              # 前端静态资源（无需构建，直接部署）
 │   ├── index.html       # 首页（需登录）
 │   ├── login.html       # 登录页
 │   ├── login.js
 │   ├── main.js
+│   ├── slide.html       # 滑动验证码演示页
 │   └── style.css
 ├── test/                # Vitest 单元测试
 ├── package.json
@@ -75,7 +77,22 @@ npm run dev
 | GET  | `/api/me`   | 当前用户信息（需 `Authorization: Bearer <token>`）|
 | GET  | `/api/hello?name=x` | 返回问候语            |
 | GET  | `/api/time` | 返回服务器时间与访问地区     |
+| GET  | `/api/slide/generate` | 滑动验证码：生成背景图 + 拼图块两张 SVG 图片与一次性 token |
+| POST | `/api/slide/verify`  | 滑动验证码：校验位置与拖动轨迹（`{ token, x, y, track, duration }`）|
 | POST | `/api/echo` | 回显请求体（JSON）           |
+
+## 滑动验证码
+
+`public/slide.html` 为滑动拼图验证码演示页，采用**前后端分离**设计：
+
+- `GET /api/slide/generate`：服务端随机生成拼图缺口位置，**直接产出两张 SVG 图片**（背景图 + 拼图块，Workers 无 canvas，用纯字符串拼 SVG 零依赖；拼图块通过 clipPath 从同一组随机形状中抠出，与背景严格一致），并下发一次性 token（5 分钟有效，内存 Map 存储，验证后立即消费，防重放）。
+- **缺口水平坐标只保存在服务端**，不下发给客户端——前端拿不到真实位置，无法伪造终点；仅下发 `puzzleY`（拼图块垂直偏移，用于前端把拼图块与缺口对齐，不参与验证）。
+- 前端只负责展示图片、采集拖动轨迹、提交坐标，不做任何最终判断。
+- `POST /api/slide/verify`：服务端校验 token 有效性、滑块终点位置（容差 5px），并对轨迹做行为评分（Y 轴抖动、速度波动、终点微调、停顿、耗时区间等），`score >= 60` 判定通过。
+- 硬性拦截：轨迹点数过少、拖动时间过短/超时、起点偏离滑块位置等直接拒绝。
+- 打开 `http://localhost:8787/slide.html` 可直接体验。
+
+> 局限说明：token 与缺口位置绑定存放在内存 Map，单实例演示足够；生产多实例部署建议改用 KV 存储。
 
 > 其他路径（如 `/`、`/login.html`）由静态资源自动托管；SPA 模式下未匹配路径回退到 `index.html`。
 

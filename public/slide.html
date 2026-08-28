@@ -1,176 +1,319 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <title>滑动验证码优化版（低误杀率）</title>
-    <style>
-        body { font-family: sans-serif; background: #f4f4f9; display: flex; justify-content: center; padding-top: 50px; }
-        .container { background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 420px; }
-        #bg-canvas { display: block; border-radius: 5px; }
-        .bg-box { position: relative; width: 300px; height: 150px; margin-bottom: 20px; overflow: hidden; }
-        #puzzle { position: absolute; top: 50px; left: 0; width: 40px; height: 40px; pointer-events: none; filter: drop-shadow(0 0 4px #000); }
-        .slider-box { position: relative; width: 300px; height: 40px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 4px; }
-        #btn { position: absolute; left: 0; top: 0; width: 40px; height: 40px; background: #fff; border: 1px solid #ddd; cursor: grab; text-align: center; line-height: 38px; user-select: none; }
-        #result { margin-top: 20px; font-weight: bold; }
-        #score-board { margin-top: 10px; padding: 10px; background: #f8f8f8; border: 1px solid #eee; font-size: 12px; color: #333; }
-        .success { color: #28a745; } .fail { color: #dc3545; }
-    </style>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>滑动验证码 · Captcha Worker</title>
+  <style>
+    :root {
+      --primary: #3b82f6;
+      --success: #16a34a;
+      --danger: #dc2626;
+      --text: #1f2937;
+      --muted: #9ca3af;
+      --bg: #eef1f6;
+      --card: #ffffff;
+      --border: #e5e7eb;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      background: var(--bg);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .card {
+      background: var(--card);
+      border-radius: 16px;
+      box-shadow: 0 20px 50px rgba(31, 41, 55, 0.12);
+      padding: 28px;
+      width: 380px;
+    }
+    .title { font-size: 18px; font-weight: 600; color: var(--text); }
+    .subtitle { font-size: 13px; color: var(--muted); margin: 4px 0 20px; }
+    .bg-box {
+      position: relative;
+      width: 300px; /* 与服务端 SVG 逻辑像素 1:1，避免缩放导致滑块对不齐缺口 */
+      height: 150px;
+      border-radius: 10px;
+      overflow: hidden;
+      background: #d9dee7;
+      margin-bottom: 16px;
+      box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.08);
+    }
+    #bg-img { display: block; width: 100%; height: 100%; }
+    #puzzle-wrap {
+      position: absolute;
+      left: 0;
+      width: 40px;
+      height: 40px;
+      pointer-events: none;
+      z-index: 2;
+    }
+    #puzzle-img {
+      display: block;
+      width: 40px;
+      height: 40px;
+      filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.35));
+    }
+    .slider-box {
+      position: relative;
+      height: 44px;
+      width: 300px;
+      background: #f3f4f6;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      user-select: none;
+      touch-action: none; /* 阻止触摸滚动，交给 pointer 事件处理 */
+    }
+    .slider-hint {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 13px;
+      color: var(--muted);
+      pointer-events: none;
+      transition: opacity 0.15s;
+    }
+    #btn {
+      position: absolute;
+      left: 0;
+      top: 0;
+      width: 44px;
+      height: 44px;
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 9px;
+      cursor: grab;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 16px;
+      color: var(--primary);
+      z-index: 3;
+      transition: background 0.15s;
+    }
+    #btn.dragging { cursor: grabbing; background: #eff6ff; }
+    #btn:active { background: #dbeafe; }
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 14px;
+    }
+    #result {
+      flex: 1;
+      font-size: 13px;
+      font-weight: 500;
+    }
+    #result.success { color: var(--success); }
+    #result.fail { color: var(--danger); }
+    #btn-refresh {
+      border: 1px solid var(--border);
+      background: #fff;
+      border-radius: 8px;
+      padding: 6px 12px;
+      font-size: 13px;
+      color: var(--text);
+      cursor: pointer;
+      transition: background 0.15s;
+    }
+    #btn-refresh:hover { background: #f3f4f6; }
+    .score-board {
+      margin-top: 12px;
+      padding: 10px 12px;
+      background: #f9fafb;
+      border: 1px solid #f0f0f0;
+      border-radius: 8px;
+      font-size: 12px;
+      color: var(--text);
+      line-height: 1.8;
+      word-break: break-all;
+    }
+  </style>
 </head>
 <body>
-<div class="container">
+  <div class="card">
+    <div class="title">安全验证</div>
+    <div class="subtitle">按住滑块，拖到缺口位置完成验证</div>
+
     <div class="bg-box">
-        <canvas id="bg-canvas" width="300" height="150"></canvas>
-        <canvas id="puzzle" width="40" height="40" style="top: 50px;"></canvas>
+      <img id="bg-img" alt="验证码背景" />
+      <div id="puzzle-wrap"><img id="puzzle-img" alt="拼图块" /></div>
     </div>
-    <div class="slider-box"><div id="btn">→</div></div>
-    <div id="result"></div>
-    <div id="score-board">请拖动滑块进行验证...</div>
-</div>
 
-<script>
-    let token = '', targetX = 0, startTime = 0;
-    let track = [];
-    let currentX = 0, currentY = 0, startMouseX = 0, startMouseY = 0;
-    const btn = document.getElementById('btn');
-    const canvas = document.getElementById('bg-canvas');
-    const ctx = canvas.getContext('2d');
-    const puzzleCanvas = document.getElementById('puzzle');
-    const pCtx = puzzleCanvas.getContext('2d');
-    const resultDiv = document.getElementById('result');
-    const scoreBoard = document.getElementById('score-board');
+    <div class="slider-box">
+      <div class="slider-hint">按住滑块向右拖动</div>
+      <div id="btn">→</div>
+    </div>
 
-    function init() {
-        ctx.clearRect(0, 0, 300, 150);
-        ctx.fillStyle = '#e0e0e0'; ctx.fillRect(0, 0, 300, 150);
-        for (let i = 0; i < 120; i++) { ctx.fillStyle = `hsl(${Math.random()*360},60%,80%)`; ctx.fillRect(Math.random()*300, Math.random()*150, 10, 10); }
-        
-        targetX = Math.floor(Math.random() * 170) + 60;
-        const targetY = 50;
-        
-        ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.fillRect(targetX, targetY, 40, 40);
-        ctx.strokeStyle = 'white'; ctx.strokeRect(targetX, targetY, 40, 40);
+    <div class="toolbar">
+      <div id="result">请完成验证</div>
+      <button id="btn-refresh">换一张</button>
+    </div>
 
-        pCtx.clearRect(0,0,40,40);
-        pCtx.drawImage(canvas, targetX, targetY, 40, 40, 0, 0, 40, 40);
+    <div class="score-board" id="score-board">等待验证…</div>
+  </div>
 
-        token = Math.random().toString(36).substring(2);
-        track = []; currentX = 0;
-        btn.style.left = '0px';
-        puzzleCanvas.style.left = '0px';
-        resultDiv.innerHTML = ''; resultDiv.className = '';
-        scoreBoard.innerHTML = "正常拖动即可，无需特意做抖动或停顿。";
-        scoreBoard.style.color = "#333";
+  <script>
+    // ============================================================
+    // 滑动验证码（服务端生成图片 / 服务端校验版）
+    //
+    // 背景图与拼图块两张 SVG 图片由 /api/slide/generate 下发（服务端随机
+    // 生成缺口位置并直接产出图片，前端拿不到缺口水平坐标，无法伪造终点）；
+    // 拖动轨迹提交 /api/slide/verify 由服务端评分判定。
+    // 前端只负责：展示图片 + 采集轨迹 + 提交坐标，不做任何最终判断。
+    // ============================================================
+
+    const W = 300, H = 150, SIZE = 40 // 与服务端 SVG 逻辑像素保持一致
+
+    const bgImg = document.getElementById('bg-img')
+    const puzzleWrap = document.getElementById('puzzle-wrap')
+    const btn = document.getElementById('btn')
+    const hint = document.querySelector('.slider-hint')
+    const result = document.getElementById('result')
+    const scoreBoard = document.getElementById('score-board')
+    const refreshBtn = document.getElementById('btn-refresh')
+
+    // ---- 当前验证码状态 ----
+    let token = ''      // 服务端下发的一次性 token
+    let puzzleY = 0     // 拼图块垂直偏移（前端定位用，不参与验证）
+
+    // ---- 拖拽状态与轨迹 ----
+    let dragging = false
+    let verifying = false
+    let startX = 0, startY = 0
+    let startTime = 0
+    let offsetX = 0     // 滑块当前位置
+    let track = []      // 轨迹采样 [{ x, y, t }]
+
+    // SVG 字符串 -> data URL（img 直接加载）
+    function svgToUrl(svg) {
+      return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg)
     }
 
-    let isDragging = false;
-    btn.addEventListener('mousedown', e => {
-        isDragging = true;
-        startMouseX = e.clientX;
-        startMouseY = e.clientY;
-        startTime = performance.now();
-        track = [];
-        btn.style.cursor = 'grabbing';
-    });
+    // 向服务端请求生成图片 + token，并渲染验证码
+    async function loadPuzzle() {
+      verifying = false
+      track = []
+      offsetX = 0
+      btn.style.left = '0px'
+      btn.style.pointerEvents = ''
+      puzzleWrap.style.left = '0px'
+      hint.style.opacity = '1'
+      result.textContent = '正在加载验证…'
+      result.className = ''
+      scoreBoard.textContent = '请求服务端生成验证码…'
 
-    document.addEventListener('mousemove', e => {
-        if (!isDragging) return;
-        currentX = Math.max(0, Math.min(e.clientX - startMouseX, 260)); 
-        currentY = e.clientY - startMouseY;
-        btn.style.left = currentX + 'px';
-        puzzleCanvas.style.left = currentX + 'px';
-        const time = Math.round(performance.now() - startTime);
-        track.push({ x: currentX, y: currentY, t: time });
-    });
+      try {
+        const res = await fetch('/api/slide/generate')
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error ?? '加载失败')
 
-    document.addEventListener('mouseup', () => {
-        if (!isDragging) return;
-        isDragging = false;
-        btn.style.cursor = 'grab';
-        performVerification();
-    });
+        token = data.token
+        puzzleY = data.puzzleY ?? 0
 
-    function performVerification() {
-        // 一、硬性拦截（绝对规则，大概率是机器人）
-        if (track.length < 10) return fail("轨迹点数太少，疑似脚本注入");
-        const duration = track[track.length - 1].t;
-        if (duration < 300) return fail("拖动时间极短，疑似直接注入坐标");
-        if (duration > 10000) return fail("验证码超时");
+        // 两张图片均由服务端生成，前端不参与任何绘制
+        bgImg.src = svgToUrl(data.background)
+        puzzleWrap.style.top = puzzleY + 'px'
+        document.getElementById('puzzle-img').src = svgToUrl(data.puzzle)
 
-        // 二、核心判定：位置为王
-        const diff = Math.abs(currentX - targetX);
-        // 位置完全不对，直接拦截，无需评分
-        if (diff > 5) return fail("滑块位置未对准");
+        result.textContent = '请完成验证'
+        scoreBoard.textContent = '正常拖动滑块到缺口位置即可，无需刻意抖动或停顿。'
+      } catch (err) {
+        result.textContent = '加载失败，请重试'
+        result.className = 'fail'
+        scoreBoard.textContent = err.message
+      }
+    }
 
-        let score = 40; // 基础分：位置在容差范围内，先给40分
+    // ---- 拖拽（Pointer Events：同时兼容鼠标 / 触摸 / 触控笔） ----
+    btn.addEventListener('pointerdown', (e) => {
+      if (verifying) return
+      dragging = true
+      startX = e.clientX
+      startY = e.clientY
+      startTime = performance.now()
+      track = []
+      btn.setPointerCapture(e.pointerId)
+      btn.classList.add('dragging')
+      hint.style.opacity = '0'
+    })
 
-        // 三、行为特征加分项（不强制要求，有则加分，无则给基础分）
-        
-        // 1. Y轴抖动检测（放宽要求：只要有一点点抖动就加10分，完全没有也给5分，绝不扣分）
-        const yValues = track.map(p => p.y);
-        const meanY = yValues.reduce((a,b) => a+b, 0) / yValues.length;
-        const yStdDev = Math.sqrt(yValues.reduce((sum, y) => sum + Math.pow(y - meanY, 2), 0) / yValues.length);
-        score += yStdDev > 1.5 ? 10 : (yStdDev > 0.2 ? 10 : 5); 
+    document.addEventListener('pointermove', (e) => {
+      if (!dragging) return
+      // 限制在滑块轨道范围内
+      offsetX = Math.max(0, Math.min(e.clientX - startX, W - SIZE))
+      btn.style.left = offsetX + 'px'
+      puzzleWrap.style.left = offsetX + 'px'
+      track.push({
+        x: Math.round(offsetX * 10) / 10,
+        y: Math.round((e.clientY - startY) * 10) / 10,
+        t: Math.round(performance.now() - startTime),
+      })
+    })
 
-        // 2. 速度波动检测（放宽要求：有波动加分，匀速也给基础分）
-        const velocities = [];
-        for (let i = 1; i < track.length; i++) {
-            const dt = track[i].t - track[i-1].t;
-            const dx = track[i].x - track[i-1].x;
-            if (dt > 0) velocities.push(Math.abs(dx / dt));
-        }
-        const meanV = velocities.reduce((a,b) => a+b, 0) / velocities.length;
-        const vStdDev = Math.sqrt(velocities.reduce((sum, v) => sum + Math.pow(v - meanV, 2), 0) / velocities.length);
-        score += vStdDev > 2 ? 10 : (vStdDev > 0.5 ? 10 : 5);
+    document.addEventListener('pointerup', () => {
+      if (!dragging) return
+      dragging = false
+      btn.classList.remove('dragging')
+      submitVerify()
+    })
 
-        // 3. 终点微调检测（最后几个X坐标是否几乎不动了，若微调奖励10分）
-        const xs = track.map(p => p.x);
-        const last5 = xs.slice(-5);
-        const diffLast5 = last5[last5.length - 1] - last5[0];
-        if (Math.abs(diffLast5) < 5) score += 10;
+    // 提交服务端校验（位置 + 轨迹 + token）
+    async function submitVerify() {
+      if (verifying) return
+      verifying = true
+      btn.style.cursor = 'wait'
+      result.textContent = '验证中…'
+      result.className = ''
 
-        // 4. 停顿检测（有停顿加10分，无停顿也给基础5分）
-        const ts = track.map(p => p.t);
-        let pauses = 0;
-        for (let i = 1; i < ts.length; i++) {
-            if (ts[i] - ts[i-1] > 100) pauses++;
-        }
-        score += pauses >= 2 ? 10 : 5;
+      const duration = track.length ? track[track.length - 1].t : 0
+      const body = {
+        token,
+        x: offsetX,
+        y: track.length ? track[track.length - 1].y : 0,
+        track,
+        duration,
+      }
 
-        // 5. 时间范围加分（正常人类常在500ms-5000ms之间）
-        score += (duration >= 500 && duration <= 5000) ? 10 : 5;
+      try {
+        const res = await fetch('/api/slide/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        })
+        const data = await res.json()
+        if (!res.ok) throw new Error(data.error ?? '校验失败')
 
-        // 四、防高级机器人：极度平稳的匀速直线（无Y抖、无速度波动、无微调、无停顿）
-        // 这种特征通常不是真人，即便分数可能达及格线，也要硬性扣分
-        if (yStdDev < 0.1 && vStdDev < 0.1 && pauses === 0 && Math.abs(diffLast5) < 2) {
-            score -= 30; // 扣成极低分
-        }
-
-        // 五、展示评分细节
-        scoreBoard.innerHTML = `
-            轨迹点数: ${track.length} | 总耗时: ${duration}ms<br>
-            Y轴抖动: ${yStdDev.toFixed(2)} | 速度波动: ${vStdDev.toFixed(2)}<br>
-            停顿次数: ${pauses} | 终点微调: ${Math.abs(diffLast5) < 5 ? '是' : '否'}<br>
-            <strong>最终置信度评分: ${score}/100</strong>
-        `;
-
-        // 六、最终判定（调整通过线为60分）
-        if (score > 60) {
-            resultDiv.innerHTML = "✅ 验证成功！被判定为真人操作";
-            resultDiv.className = "success";
+        if (data.success) {
+          result.textContent = '验证成功'
+          result.className = 'success'
+          btn.style.pointerEvents = 'none' // 锁定滑块，禁止重复验证
         } else {
-            // 主要针对硬性扣分或者异常分数
-            fail(`风险拦截：行为轨迹评分过低 (${score} < 60)`);
+          result.textContent = data.message
+          result.className = 'fail'
+          // 一次性 token 已被服务端消费，自动换一张
+          setTimeout(loadPuzzle, 1600)
         }
+        scoreBoard.innerHTML = `服务端评分：<strong>${data.score ?? '—'}/100</strong><br>${data.message ?? ''}`
+      } catch (err) {
+        result.textContent = '校验失败'
+        result.className = 'fail'
+        scoreBoard.textContent = err.message
+      } finally {
+        verifying = false
+        btn.style.cursor = ''
+      }
     }
 
-    function fail(msg) {
-        resultDiv.innerHTML = "❌ 验证失败: " + msg;
-        resultDiv.className = "fail";
-        scoreBoard.style.color = "red";
-        setTimeout(init, 1500);
-    }
-
-    init();
-</script>
+    refreshBtn.addEventListener('click', loadPuzzle)
+    loadPuzzle()
+  </script>
 </body>
 </html>
