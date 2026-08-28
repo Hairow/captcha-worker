@@ -35,7 +35,10 @@
     .subtitle { font-size: 13px; color: var(--muted); margin: 4px 0 20px; }
     .bg-box {
       position: relative;
-      /* 宽高由 JS 按服务端下发的 width/height 动态设置（1:1，避免缩放导致滑块对不齐缺口） */
+      /* 默认尺寸（接口数据未到达时的回退值）；
+         数据到达后由 JS 按服务端下发的 width/height 覆盖，保持 1:1 不缩放 */
+      width: 300px;
+      height: 150px;
       border-radius: 10px;
       overflow: hidden;
       background: #d9dee7;
@@ -46,7 +49,9 @@
     #puzzle-wrap {
       position: absolute;
       left: 0;
-      /* 宽高由 JS 按服务端下发的 puzzleSize 动态设置 */
+      /* 默认尺寸（回退值），数据到达后由 JS 按 puzzleSize 覆盖 */
+      width: 40px;
+      height: 40px;
       pointer-events: none;
       z-index: 2;
       /* 位移用 transform（GPU 合成），避免频繁改 left 触发 layout 产生移动端残影 */
@@ -54,13 +59,16 @@
     }
     #puzzle-img {
       display: block;
-      /* 宽高由 JS 按服务端下发的 puzzleSize 动态设置 */
+      /* 默认尺寸（回退值），数据到达后由 JS 按 puzzleSize 覆盖 */
+      width: 40px;
+      height: 40px;
       /* 不用 drop-shadow：SVG data URL + filter 在 iOS 合成层上易出现移动残影 */
     }
     .slider-box {
       position: relative;
       height: 44px;
-      /* 宽度由 JS 按服务端下发的 width 动态设置（与画布同宽，保证滑块最大位移对准缺口） */
+      /* 默认宽度（回退值），数据到达后由 JS 按服务端下发的 width 覆盖 */
+      width: 300px;
       background: #f3f4f6;
       border: 1px solid var(--border);
       border-radius: 10px;
@@ -218,9 +226,10 @@
         puzzleY = data.puzzleY ?? 0
 
         // 尺寸统一取自服务端下发值，前后端保持一致
-        W = data.width ?? 0
-        H = data.height ?? 0
-        SIZE = data.puzzleSize ?? 0
+        // （?? 后为回退值：接口数据异常/未携带时使用默认尺寸，与 CSS 一致）
+        W = data.width ?? 300
+        H = data.height ?? 150
+        SIZE = data.puzzleSize ?? 40
         bgBox.style.width = W + 'px'
         bgBox.style.height = H + 'px'
         sliderBox.style.width = W + 'px'
