@@ -137,7 +137,7 @@ export async function generateSlide(env) {
 
   return {
     uuid,
-    targetX, // 仅供服务端校验/单元测试使用，路由层不会下发给客户端
+    targetX, // 仅供服务端校验使用，路由层不会下发给客户端
     targetY,
     background,
     puzzle,
@@ -147,9 +147,6 @@ export async function generateSlide(env) {
     expiresIn: TTL_MS,
   }
 }
-
-// 导出供单元测试直接断言 SVG 结构（含坐标，仅测试可见）
-export { buildBackground, buildPuzzle, buildShapes }
 
 export async function verifySlide(body, env) {
   const { uuid, x, y, track, duration } = body ?? {}
