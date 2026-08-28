@@ -35,8 +35,7 @@
     .subtitle { font-size: 13px; color: var(--muted); margin: 4px 0 20px; }
     .bg-box {
       position: relative;
-      width: 300px; /* 与服务端 SVG 逻辑像素 1:1，避免缩放导致滑块对不齐缺口 */
-      height: 150px;
+      /* 宽高由 JS 按服务端下发的 width/height 动态设置（1:1，避免缩放导致滑块对不齐缺口） */
       border-radius: 10px;
       overflow: hidden;
       background: #d9dee7;
@@ -47,8 +46,7 @@
     #puzzle-wrap {
       position: absolute;
       left: 0;
-      width: 40px;
-      height: 40px;
+      /* 宽高由 JS 按服务端下发的 puzzleSize 动态设置 */
       pointer-events: none;
       z-index: 2;
       /* 位移用 transform（GPU 合成），避免频繁改 left 触发 layout 产生移动端残影 */
@@ -56,14 +54,13 @@
     }
     #puzzle-img {
       display: block;
-      width: 40px;
-      height: 40px;
+      /* 宽高由 JS 按服务端下发的 puzzleSize 动态设置 */
       /* 不用 drop-shadow：SVG data URL + filter 在 iOS 合成层上易出现移动残影 */
     }
     .slider-box {
       position: relative;
       height: 44px;
-      width: 300px;
+      /* 宽度由 JS 按服务端下发的 width 动态设置（与画布同宽，保证滑块最大位移对准缺口） */
       background: #f3f4f6;
       border: 1px solid var(--border);
       border-radius: 10px;
@@ -172,10 +169,15 @@
     // 前端只负责：展示图片 + 采集轨迹 + 提交坐标，不做任何最终判断。
     // ============================================================
 
-    const W = 300, H = 150, SIZE = 40 // 与服务端 SVG 逻辑像素保持一致
+    // 画布/拼图逻辑尺寸：由 /api/slide/generate 下发（width/height/puzzleSize），
+    // 前端不硬编码，防止两侧尺寸不一致导致滑块对不齐缺口
+    let W = 0, H = 0, SIZE = 0
 
     const bgImg = document.getElementById('bg-img')
+    const puzzleImg = document.getElementById('puzzle-img')
     const puzzleWrap = document.getElementById('puzzle-wrap')
+    const bgBox = document.querySelector('.bg-box')
+    const sliderBox = document.querySelector('.slider-box')
     const btn = document.getElementById('btn')
     const hint = document.querySelector('.slider-hint')
     const result = document.getElementById('result')
@@ -215,10 +217,22 @@
         uuid = data.uuid
         puzzleY = data.puzzleY ?? 0
 
+        // 尺寸统一取自服务端下发值，前后端保持一致
+        W = data.width ?? 0
+        H = data.height ?? 0
+        SIZE = data.puzzleSize ?? 0
+        bgBox.style.width = W + 'px'
+        bgBox.style.height = H + 'px'
+        sliderBox.style.width = W + 'px'
+        puzzleWrap.style.width = SIZE + 'px'
+        puzzleWrap.style.height = SIZE + 'px'
+        puzzleImg.style.width = SIZE + 'px'
+        puzzleImg.style.height = SIZE + 'px'
+
         // 两张 PNG 图片均由服务端生成（data:image/png;base64,...），前端直接加载
         bgImg.src = data.background
         puzzleWrap.style.top = puzzleY + 'px'
-        document.getElementById('puzzle-img').src = data.puzzle
+        puzzleImg.src = data.puzzle
 
         result.textContent = '请完成验证'
         scoreBoard.textContent = '正常拖动滑块到缺口位置即可，无需刻意抖动或停顿。'
