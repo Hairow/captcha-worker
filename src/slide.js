@@ -65,6 +65,9 @@ function buildBackground(parts, targetX, targetY) {
 }
 
 // 拼图块：clipPath 抠出背景上缺口区域的形状，得到与背景严格一致的拼图内容
+// 注意坐标系统：拼图块 SVG 画布是 0~PUZZLE_SIZE 的本地坐标系，而缺口位置 targetX/targetY
+// 是背景图坐标系。因此 clip 矩形用本地坐标 (0,0)，把背景内容整体平移 -targetX/-targetY，
+// 使背景坐标系中缺口区域恰好落在拼图画布上，否则裁剪结果会落在画布外导致拼图块全透明。
 function buildPuzzle(parts, targetX, targetY) {
   const { shapes, hue1, hue2 } = parts
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${PUZZLE_SIZE}" height="${PUZZLE_SIZE}" viewBox="0 0 ${PUZZLE_SIZE} ${PUZZLE_SIZE}">
@@ -74,10 +77,10 @@ function buildPuzzle(parts, targetX, targetY) {
       <stop offset="100%" stop-color="hsl(${hue2},55%,58%)"/>
     </linearGradient>
     <clipPath id="pz-clip">
-      <rect x="${fmt(targetX)}" y="${fmt(targetY)}" width="${PUZZLE_SIZE}" height="${PUZZLE_SIZE}" rx="4"/>
+      <rect x="0" y="0" width="${PUZZLE_SIZE}" height="${PUZZLE_SIZE}" rx="4"/>
     </clipPath>
   </defs>
-  <g clip-path="url(#pz-clip)">
+  <g clip-path="url(#pz-clip)" transform="translate(${-targetX} ${-targetY})">
     <rect width="${BG_W}" height="${BG_H}" fill="url(#pz-grad)"/>
     ${shapes.join('\n    ')}
   </g>

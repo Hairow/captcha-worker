@@ -144,6 +144,14 @@ describe('滑动验证码 API', () => {
     expect(data.targetY).toBeUndefined()
   })
 
+  it('拼图块使用本地坐标（clip 在画布内 + 内容平移），避免透明被背景遮住', () => {
+    const gen = generateSlide()
+    // clip 矩形必须是本地坐标 (0,0,40,40)，而不是背景坐标系的 targetX/targetY
+    expect(gen.puzzle).toContain('<rect x="0" y="0" width="40" height="40" rx="4"/>')
+    // 背景内容整体平移，使缺口区域落在拼图画布上
+    expect(gen.puzzle).toContain(`transform="translate(${-gen.targetX} ${-gen.targetY})"`)
+  })
+
   // 生成一段模拟真人轨迹：从 0 平滑逼近 targetX，带 y 抖动与停顿
   function humanTrack(targetX) {
     const track = []
