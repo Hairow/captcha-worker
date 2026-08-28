@@ -115,13 +115,13 @@ export default {
       })
     }
 
-    // 滑动验证码：生成两张 PNG 图片 + 一次性 token（GET）
+    // 滑动验证码：生成两张 PNG 图片 + 一次性 uuid（GET）
     if (request.method === 'GET' && path === '/api/slide/generate') {
       const data = await generateSlide(env)
       // 缺口水平坐标（targetX）是验证核心，绝不下发给客户端；
       // puzzleY 仅用于前端把拼图块放到与缺口相同的垂直位置（不参与验证）
       return json({
-        token: data.token,
+        uuid: data.uuid,
         background: data.background,
         puzzle: data.puzzle,
         width: data.width,

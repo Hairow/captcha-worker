@@ -183,7 +183,7 @@
     const refreshBtn = document.getElementById('btn-refresh')
 
     // ---- 当前验证码状态 ----
-    let token = ''      // 服务端下发的一次性 token
+    let uuid = ''       // 服务端下发的一次性 uuid
     let puzzleY = 0     // 拼图块垂直偏移（前端定位用，不参与验证）
 
     // ---- 拖拽状态与轨迹 ----
@@ -194,7 +194,7 @@
     let offsetX = 0     // 滑块当前位置
     let track = []      // 轨迹采样 [{ x, y, t }]
 
-    // 向服务端请求生成图片 + token，并渲染验证码
+    // 向服务端请求生成图片 + uuid，并渲染验证码
     async function loadPuzzle() {
       verifying = false
       track = []
@@ -212,7 +212,7 @@
         const data = await res.json()
         if (!res.ok) throw new Error(data.error ?? '加载失败')
 
-        token = data.token
+        uuid = data.uuid
         puzzleY = data.puzzleY ?? 0
 
         // 两张 PNG 图片均由服务端生成（data:image/png;base64,...），前端直接加载
@@ -262,7 +262,7 @@
       submitVerify()
     })
 
-    // 提交服务端校验（位置 + 轨迹 + token）
+    // 提交服务端校验（位置 + 轨迹 + uuid）
     async function submitVerify() {
       if (verifying) return
       verifying = true
@@ -272,7 +272,7 @@
 
       const duration = track.length ? track[track.length - 1].t : 0
       const body = {
-        token,
+        uuid,
         x: offsetX,
         y: track.length ? track[track.length - 1].y : 0,
         track,
@@ -295,7 +295,7 @@
         } else {
           result.textContent = data.message
           result.className = 'fail'
-          // 一次性 token 已被服务端消费，自动换一张
+          // 一次性 uuid 已被服务端消费，自动换一张
           setTimeout(loadPuzzle, 1600)
         }
         scoreBoard.innerHTML = `服务端评分：<strong>${data.score ?? '—'}/100</strong><br>${data.message ?? ''}`

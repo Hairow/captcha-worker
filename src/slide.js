@@ -1,14 +1,14 @@
 // 滑动验证码服务端逻辑（PNG 图片版）
 // - generateSlide：随机生成拼图缺口位置，用 resvg 把 SVG 渲染成 PNG（背景图 + 拼图块）。
-//   前端只拿到图片与一次性 token，拿不到缺口坐标（坐标只保存在服务端用于校验）。
-// - verifySlide：校验 token、滑块终点位置与拖动轨迹（行为评分全部在服务端判定）。
+//   前端只拿到图片与一次性 uuid，拿不到缺口坐标（坐标只保存在服务端用于校验）。
+// - verifySlide：校验 uuid、滑块终点位置与拖动轨迹（行为评分全部在服务端判定）。
 //
 // 为什么输出 PNG 而不是 SVG：SVG 是文本格式，缺口坐标 targetX/targetY 必然以明文
 // 出现在 SVG 文档里（遮罩 rect、clipPath、translate），前端解码 data URL 即可提取，
 // 等于把缺口位置直接交给了客户端。渲染成 PNG 后坐标被"烤"进像素，无法再提取。
 // 实现：Workers 无 canvas，使用 @resvg/resvg-wasm（Rust resvg 的纯 WASM 构建）。
 //
-// 存储说明：token 与缺口位置绑定存放在 KV（5 分钟 TTL，一次性消费）。
+// 存储说明：uuid 与缺口位置绑定存放在 KV（5 分钟 TTL，一次性消费）。
 // KV 天然跨实例共享、按 TTL 自动过期，生产多实例部署无需额外处理。
 // 本地 wrangler dev 自动使用本地 KV 模拟；单元测试传入内存 mock 即可。
 
@@ -43,18 +43,16 @@ async function renderPng(svg) {
 const PUZZLE_SIZE = 40 // 拼图块尺寸（与前端保持一致）
 const BG_W = 300 // 画布宽
 const BG_H = 150 // 画布高
-const TTL_MS = 5 * 60 * 1000 // token 有效期
+const TTL_MS = 5 * 60 * 1000 // uuid 有效期
 const TTL_S = TTL_MS / 1000 // KV expirationTtl（秒）
 const TOLERANCE = 5 // 滑块终点允许的偏差（px）
 const PASS_SCORE = 60 // 通过分数线
 
 const fmt = (n) => +n.toFixed(1)
 
-// 加密级随机 token（24 字节 hex）
-function randomToken() {
-  const bytes = new Uint8Array(24)
-  crypto.getRandomValues(bytes)
-  return [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('')
+// 加密级随机 uuid（UUID v4，标准 8-4-4-4-12 格式）
+function randomUuid() {
+  return crypto.randomUUID()
 }
 
 // 生成一组随机的背景形状（背景图与拼图块共用，保证拼图内容与背景缺口区域一致）
@@ -121,12 +119,12 @@ export async function generateSlide(env) {
   // 垂直方向随机并留出安全边距
   const targetX = Math.floor(Math.random() * 101) + 100
   const targetY = Math.floor(Math.random() * (BG_H - PUZZLE_SIZE - 20)) + 10
-  const token = randomToken()
+  const uuid = randomUuid()
 
   const parts = buildShapes()
-  // token -> 缺口坐标写入 KV，TTL 到期由 KV 自动清理，无需手动扫过期
+  // uuid -> 缺口坐标写入 KV，TTL 到期由 KV 自动清理，无需手动扫过期
   await env.SLIDE_KV.put(
-    token,
+    uuid,
     JSON.stringify({ targetX, targetY, exp: Date.now() + TTL_MS }),
     { expirationTtl: TTL_S }
   )
@@ -138,7 +136,7 @@ export async function generateSlide(env) {
   ])
 
   return {
-    token,
+    uuid,
     targetX, // 仅供服务端校验/单元测试使用，路由层不会下发给客户端
     targetY,
     background,
@@ -154,17 +152,17 @@ export async function generateSlide(env) {
 export { buildBackground, buildPuzzle, buildShapes }
 
 export async function verifySlide(body, env) {
-  const { token, x, y, track, duration } = body ?? {}
+  const { uuid, x, y, track, duration } = body ?? {}
 
-  // ---- 1. token 校验（一次性 + 未过期） ----
-  if (!token) {
+  // ---- 1. uuid 校验（一次性 + 未过期） ----
+  if (!uuid) {
     return { success: false, message: '验证码已失效，请重试' }
   }
-  const raw = await env.SLIDE_KV.get(token)
+  const raw = await env.SLIDE_KV.get(uuid)
   if (!raw) {
     return { success: false, message: '验证码已失效，请重试' }
   }
-  await env.SLIDE_KV.delete(token) // 一次性：无论成败都消费掉，防重放
+  await env.SLIDE_KV.delete(uuid) // 一次性：无论成败都消费掉，防重放
   let rec
   try {
     rec = JSON.parse(raw)
