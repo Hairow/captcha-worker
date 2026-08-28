@@ -115,7 +115,7 @@ export default {
       })
     }
 
-    // 滑动验证码：生成两张 SVG 图片 + 一次性 token（GET）
+    // 滑动验证码：生成两张 PNG 图片 + 一次性 token（GET）
     if (request.method === 'GET' && path === '/api/slide/generate') {
       const data = await generateSlide(env)
       // 缺口水平坐标（targetX）是验证核心，绝不下发给客户端；

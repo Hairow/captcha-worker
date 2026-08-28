@@ -166,7 +166,7 @@
     // ============================================================
     // 滑动验证码（服务端生成图片 / 服务端校验版）
     //
-    // 背景图与拼图块两张 SVG 图片由 /api/slide/generate 下发（服务端随机
+    // 背景图与拼图块两张 PNG 图片由 /api/slide/generate 下发（服务端随机
     // 生成缺口位置并直接产出图片，前端拿不到缺口水平坐标，无法伪造终点）；
     // 拖动轨迹提交 /api/slide/verify 由服务端评分判定。
     // 前端只负责：展示图片 + 采集轨迹 + 提交坐标，不做任何最终判断。
@@ -194,11 +194,6 @@
     let offsetX = 0     // 滑块当前位置
     let track = []      // 轨迹采样 [{ x, y, t }]
 
-    // SVG 字符串 -> data URL（img 直接加载）
-    function svgToUrl(svg) {
-      return 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(svg)
-    }
-
     // 向服务端请求生成图片 + token，并渲染验证码
     async function loadPuzzle() {
       verifying = false
@@ -220,10 +215,10 @@
         token = data.token
         puzzleY = data.puzzleY ?? 0
 
-        // 两张图片均由服务端生成，前端不参与任何绘制
-        bgImg.src = svgToUrl(data.background)
+        // 两张 PNG 图片均由服务端生成（data:image/png;base64,...），前端直接加载
+        bgImg.src = data.background
         puzzleWrap.style.top = puzzleY + 'px'
-        document.getElementById('puzzle-img').src = svgToUrl(data.puzzle)
+        document.getElementById('puzzle-img').src = data.puzzle
 
         result.textContent = '请完成验证'
         scoreBoard.textContent = '正常拖动滑块到缺口位置即可，无需刻意抖动或停顿。'

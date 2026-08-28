@@ -6,11 +6,12 @@
   "description": "Cloudflare Worker 项目：前端静态资源（public）+ 后端 API（Worker）一体化",
   "scripts": {
     "dev": "wrangler dev",
-    "deploy": "wrangler deploy",
-    "test": "vitest run"
+    "deploy": "wrangler deploy"
   },
   "devDependencies": {
-    "vitest": "^3.0.0",
     "wrangler": "^4.0.0"
+  },
+  "dependencies": {
+    "@resvg/resvg-wasm": "^2.6.2"
   }
 }

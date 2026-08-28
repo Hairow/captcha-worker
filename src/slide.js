@@ -1,15 +1,44 @@
-// 滑动验证码服务端逻辑（SVG 图片版）
-// - generateSlide：随机生成拼图缺口位置，并生成两张 SVG 图片（背景图 + 拼图块）。
+// 滑动验证码服务端逻辑（PNG 图片版）
+// - generateSlide：随机生成拼图缺口位置，用 resvg 把 SVG 渲染成 PNG（背景图 + 拼图块）。
 //   前端只拿到图片与一次性 token，拿不到缺口坐标（坐标只保存在服务端用于校验）。
 // - verifySlide：校验 token、滑块终点位置与拖动轨迹（行为评分全部在服务端判定）。
 //
-// 图片生成说明：Workers 运行时没有 canvas，故用纯字符串拼 SVG（零依赖）。
-// 背景图与拼图块共用同一组随机形状：背景图上在缺口处画半透明遮罩表示"洞"，
-// 拼图块用 clipPath 抠出缺口区域的形状，保证图案与背景严格一致。
+// 为什么输出 PNG 而不是 SVG：SVG 是文本格式，缺口坐标 targetX/targetY 必然以明文
+// 出现在 SVG 文档里（遮罩 rect、clipPath、translate），前端解码 data URL 即可提取，
+// 等于把缺口位置直接交给了客户端。渲染成 PNG 后坐标被"烤"进像素，无法再提取。
+// 实现：Workers 无 canvas，使用 @resvg/resvg-wasm（Rust resvg 的纯 WASM 构建）。
 //
 // 存储说明：token 与缺口位置绑定存放在 KV（5 分钟 TTL，一次性消费）。
 // KV 天然跨实例共享、按 TTL 自动过期，生产多实例部署无需额外处理。
 // 本地 wrangler dev 自动使用本地 KV 模拟；单元测试传入内存 mock 即可。
+
+import { initWasm, Resvg } from '@resvg/resvg-wasm'
+// ESM Worker 不能用 wasm_modules 绑定（仅 service-worker 格式支持），
+// 必须静态 import .wasm：wrangler 构建时把文件编译成 WebAssembly.Module 作为默认导出。
+// vitest 通过 vitest.config.js 的自定义插件做相同转换，测试与运行时行为一致。
+import wasmModule from './resvg_bg.wasm'
+
+let resvgReady
+function ensureResvg() {
+  resvgReady ??= initWasm(wasmModule)
+  return resvgReady
+}
+
+// 把 PNG 字节转成 base64 data URL（分块避免 String.fromCharCode 参数过多爆栈）
+function pngToDataUrl(png) {
+  let bin = ''
+  for (let i = 0; i < png.length; i += 0x8000) {
+    bin += String.fromCharCode(...png.subarray(i, i + 0x8000))
+  }
+  return 'data:image/png;base64,' + btoa(bin)
+}
+
+// 渲染 SVG 字符串为 PNG（透明背景，拼图块外部透明）
+async function renderPng(svg) {
+  await ensureResvg()
+  const resvg = new Resvg(svg, { background: 'rgba(0,0,0,0)' })
+  return pngToDataUrl(resvg.render().asPng())
+}
 
 const PUZZLE_SIZE = 40 // 拼图块尺寸（与前端保持一致）
 const BG_W = 300 // 画布宽
@@ -102,18 +131,27 @@ export async function generateSlide(env) {
     { expirationTtl: TTL_S }
   )
 
+  // 并行渲染两张 PNG（渲染在内存中完成，SVG 字符串不落盘也不下发）
+  const [background, puzzle] = await Promise.all([
+    renderPng(buildBackground(parts, targetX, targetY)),
+    renderPng(buildPuzzle(parts, targetX, targetY)),
+  ])
+
   return {
     token,
     targetX, // 仅供服务端校验/单元测试使用，路由层不会下发给客户端
     targetY,
-    background: buildBackground(parts, targetX, targetY),
-    puzzle: buildPuzzle(parts, targetX, targetY),
+    background,
+    puzzle,
     width: BG_W,
     height: BG_H,
     puzzleSize: PUZZLE_SIZE,
     expiresIn: TTL_MS,
   }
 }
+
+// 导出供单元测试直接断言 SVG 结构（含坐标，仅测试可见）
+export { buildBackground, buildPuzzle, buildShapes }
 
 export async function verifySlide(body, env) {
   const { token, x, y, track, duration } = body ?? {}
