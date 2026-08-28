@@ -1,4 +1,5 @@
 <?php
+
 /**
  * 滑动验证码核心逻辑（PHP / GD 版）
  * 移植自 captcha-worker 的 src/slide.js，逻辑与字段保持一致：
@@ -270,8 +271,8 @@ class SlideCaptcha
 
         return [
             'uuid' => $uuid,
-            'targetX' => $targetX, // 仅供服务端校验，路由层不要下发给客户端
-            'targetY' => $targetY,
+            // 'targetX' => $targetX, // 仅供服务端校验，路由层不要下发给客户端
+            // 'targetY' => $targetY,
             'background' => $this->toPngDataUrl($bg),
             'puzzle' => $this->toPngDataUrl($puzzle),
             'width' => self::BG_W,
@@ -325,9 +326,9 @@ class SlideCaptcha
         $score = 40;
 
         // 4.1 Y 轴抖动
-        $ys = array_map(fn ($p) => (float) ($p['y'] ?? 0), $track);
+        $ys = array_map(fn($p) => (float) ($p['y'] ?? 0), $track);
         $meanY = array_sum($ys) / count($ys);
-        $yStd = sqrt(array_sum(array_map(fn ($v) => ($v - $meanY) ** 2, $ys)) / count($ys));
+        $yStd = sqrt(array_sum(array_map(fn($v) => ($v - $meanY) ** 2, $ys)) / count($ys));
         $score += $yStd > 1.5 ? 10 : 5;
 
         // 4.2 速度波动
@@ -340,11 +341,11 @@ class SlideCaptcha
             }
         }
         $meanV = $vel ? array_sum($vel) / count($vel) : 0;
-        $vStd = $vel ? sqrt(array_sum(array_map(fn ($v) => ($v - $meanV) ** 2, $vel)) / count($vel)) : 0;
+        $vStd = $vel ? sqrt(array_sum(array_map(fn($v) => ($v - $meanV) ** 2, $vel)) / count($vel)) : 0;
         $score += $vStd > 2 ? 10 : 5;
 
         // 4.3 终点微调（最后几个采样点几乎不动，符合真人松手前微调习惯）
-        $xs = array_map(fn ($p) => (float) ($p['x'] ?? 0), $track);
+        $xs = array_map(fn($p) => (float) ($p['x'] ?? 0), $track);
         $last5 = array_slice($xs, -5);
         $diffLast5 = count($last5) ? end($last5) - reset($last5) : 0;
         if (abs($diffLast5) < 5) {
