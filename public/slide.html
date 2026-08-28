@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>滑动验证码优化版（低误杀率）</title>
+    <style>
+        body { font-family: sans-serif; background: #f4f4f9; display: flex; justify-content: center; padding-top: 50px; }
+        .container { background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 4px 10px rgba(0,0,0,0.1); width: 420px; }
+        #bg-canvas { display: block; border-radius: 5px; }
+        .bg-box { position: relative; width: 300px; height: 150px; margin-bottom: 20px; overflow: hidden; }
+        #puzzle { position: absolute; top: 50px; left: 0; width: 40px; height: 40px; pointer-events: none; filter: drop-shadow(0 0 4px #000); }
+        .slider-box { position: relative; width: 300px; height: 40px; background: #f0f0f0; border: 1px solid #ddd; border-radius: 4px; }
+        #btn { position: absolute; left: 0; top: 0; width: 40px; height: 40px; background: #fff; border: 1px solid #ddd; cursor: grab; text-align: center; line-height: 38px; user-select: none; }
+        #result { margin-top: 20px; font-weight: bold; }
+        #score-board { margin-top: 10px; padding: 10px; background: #f8f8f8; border: 1px solid #eee; font-size: 12px; color: #333; }
+        .success { color: #28a745; } .fail { color: #dc3545; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="bg-box">
+        <canvas id="bg-canvas" width="300" height="150"></canvas>
+        <canvas id="puzzle" width="40" height="40" style="top: 50px;"></canvas>
+    </div>
+    <div class="slider-box"><div id="btn">→</div></div>
+    <div id="result"></div>
+    <div id="score-board">请拖动滑块进行验证...</div>
+</div>
+
+<script>
+    let token = '', targetX = 0, startTime = 0;
+    let track = [];
+    let currentX = 0, currentY = 0, startMouseX = 0, startMouseY = 0;
+    const btn = document.getElementById('btn');
+    const canvas = document.getElementById('bg-canvas');
+    const ctx = canvas.getContext('2d');
+    const puzzleCanvas = document.getElementById('puzzle');
+    const pCtx = puzzleCanvas.getContext('2d');
+    const resultDiv = document.getElementById('result');
+    const scoreBoard = document.getElementById('score-board');
+
+    function init() {
+        ctx.clearRect(0, 0, 300, 150);
+        ctx.fillStyle = '#e0e0e0'; ctx.fillRect(0, 0, 300, 150);
+        for (let i = 0; i < 120; i++) { ctx.fillStyle = `hsl(${Math.random()*360},60%,80%)`; ctx.fillRect(Math.random()*300, Math.random()*150, 10, 10); }
+        
+        targetX = Math.floor(Math.random() * 170) + 60;
+        const targetY = 50;
+        
+        ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.fillRect(targetX, targetY, 40, 40);
+        ctx.strokeStyle = 'white'; ctx.strokeRect(targetX, targetY, 40, 40);
+
+        pCtx.clearRect(0,0,40,40);
+        pCtx.drawImage(canvas, targetX, targetY, 40, 40, 0, 0, 40, 40);
+
+        token = Math.random().toString(36).substring(2);
+        track = []; currentX = 0;
+        btn.style.left = '0px';
+        puzzleCanvas.style.left = '0px';
+        resultDiv.innerHTML = ''; resultDiv.className = '';
+        scoreBoard.innerHTML = "正常拖动即可，无需特意做抖动或停顿。";
+        scoreBoard.style.color = "#333";
+    }
+
+    let isDragging = false;
+    btn.addEventListener('mousedown', e => {
+        isDragging = true;
+        startMouseX = e.clientX;
+        startMouseY = e.clientY;
+        startTime = performance.now();
+        track = [];
+        btn.style.cursor = 'grabbing';
+    });
+
+    document.addEventListener('mousemove', e => {
+        if (!isDragging) return;
+        currentX = Math.max(0, Math.min(e.clientX - startMouseX, 260)); 
+        currentY = e.clientY - startMouseY;
+        btn.style.left = currentX + 'px';
+        puzzleCanvas.style.left = currentX + 'px';
+        const time = Math.round(performance.now() - startTime);
+        track.push({ x: currentX, y: currentY, t: time });
+    });
+
+    document.addEventListener('mouseup', () => {
+        if (!isDragging) return;
+        isDragging = false;
+        btn.style.cursor = 'grab';
+        performVerification();
+    });
+
+    function performVerification() {
+        // 一、硬性拦截（绝对规则，大概率是机器人）
+        if (track.length < 10) return fail("轨迹点数太少，疑似脚本注入");
+        const duration = track[track.length - 1].t;
+        if (duration < 300) return fail("拖动时间极短，疑似直接注入坐标");
+        if (duration > 10000) return fail("验证码超时");
+
+        // 二、核心判定：位置为王
+        const diff = Math.abs(currentX - targetX);
+        // 位置完全不对，直接拦截，无需评分
+        if (diff > 5) return fail("滑块位置未对准");
+
+        let score = 40; // 基础分：位置在容差范围内，先给40分
+
+        // 三、行为特征加分项（不强制要求，有则加分，无则给基础分）
+        
+        // 1. Y轴抖动检测（放宽要求：只要有一点点抖动就加10分，完全没有也给5分，绝不扣分）
+        const yValues = track.map(p => p.y);
+        const meanY = yValues.reduce((a,b) => a+b, 0) / yValues.length;
+        const yStdDev = Math.sqrt(yValues.reduce((sum, y) => sum + Math.pow(y - meanY, 2), 0) / yValues.length);
+        score += yStdDev > 1.5 ? 10 : (yStdDev > 0.2 ? 10 : 5); 
+
+        // 2. 速度波动检测（放宽要求：有波动加分，匀速也给基础分）
+        const velocities = [];
+        for (let i = 1; i < track.length; i++) {
+            const dt = track[i].t - track[i-1].t;
+            const dx = track[i].x - track[i-1].x;
+            if (dt > 0) velocities.push(Math.abs(dx / dt));
+        }
+        const meanV = velocities.reduce((a,b) => a+b, 0) / velocities.length;
+        const vStdDev = Math.sqrt(velocities.reduce((sum, v) => sum + Math.pow(v - meanV, 2), 0) / velocities.length);
+        score += vStdDev > 2 ? 10 : (vStdDev > 0.5 ? 10 : 5);
+
+        // 3. 终点微调检测（最后几个X坐标是否几乎不动了，若微调奖励10分）
+        const xs = track.map(p => p.x);
+        const last5 = xs.slice(-5);
+        const diffLast5 = last5[last5.length - 1] - last5[0];
+        if (Math.abs(diffLast5) < 5) score += 10;
+
+        // 4. 停顿检测（有停顿加10分，无停顿也给基础5分）
+        const ts = track.map(p => p.t);
+        let pauses = 0;
+        for (let i = 1; i < ts.length; i++) {
+            if (ts[i] - ts[i-1] > 100) pauses++;
+        }
+        score += pauses >= 2 ? 10 : 5;
+
+        // 5. 时间范围加分（正常人类常在500ms-5000ms之间）
+        score += (duration >= 500 && duration <= 5000) ? 10 : 5;
+
+        // 四、防高级机器人：极度平稳的匀速直线（无Y抖、无速度波动、无微调、无停顿）
+        // 这种特征通常不是真人，即便分数可能达及格线，也要硬性扣分
+        if (yStdDev < 0.1 && vStdDev < 0.1 && pauses === 0 && Math.abs(diffLast5) < 2) {
+            score -= 30; // 扣成极低分
+        }
+
+        // 五、展示评分细节
+        scoreBoard.innerHTML = `
+            轨迹点数: ${track.length} | 总耗时: ${duration}ms<br>
+            Y轴抖动: ${yStdDev.toFixed(2)} | 速度波动: ${vStdDev.toFixed(2)}<br>
+            停顿次数: ${pauses} | 终点微调: ${Math.abs(diffLast5) < 5 ? '是' : '否'}<br>
+            <strong>最终置信度评分: ${score}/100</strong>
+        `;
+
+        // 六、最终判定（调整通过线为60分）
+        if (score > 60) {
+            resultDiv.innerHTML = "✅ 验证成功！被判定为真人操作";
+            resultDiv.className = "success";
+        } else {
+            // 主要针对硬性扣分或者异常分数
+            fail(`风险拦截：行为轨迹评分过低 (${score} < 60)`);
+        }
+    }
+
+    function fail(msg) {
+        resultDiv.innerHTML = "❌ 验证失败: " + msg;
+        resultDiv.className = "fail";
+        scoreBoard.style.color = "red";
+        setTimeout(init, 1500);
+    }
+
+    init();
+</script>
+</body>
+</html>
