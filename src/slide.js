@@ -184,7 +184,7 @@ export async function verifySlide(body, env) {
     return { success: false, message: '验证码超时' }
   }
   // 轨迹应从滑块起点附近开始（防"只提交终点坐标"）
-  if (Math.abs(track[0].x) > 10) {
+  if (Math.abs(track[0].x) > 20) {
     return { success: false, message: '轨迹起点异常，请从滑块处开始拖动' }
   }
   // 时间必须单调递增（pointer 事件天然有序，乱序说明被篡改/反转）
