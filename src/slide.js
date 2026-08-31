@@ -138,7 +138,7 @@ export async function generateSlide(env) {
   return {
     uuid,
     // targetX, // 仅供服务端校验使用，路由层不会下发给客户端
-    // targetY,
+    targetY,
     background,
     puzzle,
     width: BG_W,
