@@ -12,7 +12,7 @@ const API_HEADERS = {
 
 const TOKEN_TTL_MS = 60 * 60 * 1000 // token 有效期 1 小时
 const TOKEN_TTL_SEC = Math.floor(TOKEN_TTL_MS / 1000)
-const AUTH_COOKIE = 'token' // HttpOnly：JS 读不到，防 XSS 窃取登录态
+// Cookie 名与读写逻辑统一在 src/token.js（AUTH_COOKIE）
 
 // 演示用户表（生产环境建议改为 KV/D1 存储，密码哈希保存）
 const USERS = {

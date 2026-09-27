@@ -21,13 +21,16 @@ export function bearerToken(request) {
   return auth.startsWith('Bearer ') ? auth.slice(7) : null
 }
 
+// 登录态 Cookie 名（读写共用，避免两处硬编码不一致）
+export const AUTH_COOKIE = 'Authorization'
+
 // 从 Cookie 解析 token（HttpOnly，JS 读不到，只能由浏览器自动携带）
 function cookieToken(request) {
   const cookie = request.headers.get('Cookie') ?? ''
   for (const part of cookie.split(';')) {
     const idx = part.indexOf('=')
     if (idx < 0) continue
-    if (part.slice(0, idx).trim() !== 'token') continue
+    if (part.slice(0, idx).trim() !== AUTH_COOKIE) continue
     try {
       return decodeURIComponent(part.slice(idx + 1).trim())
     } catch {
@@ -46,7 +49,7 @@ export function readToken(request) {
 // 生成 Set-Cookie 值；localhost 等 http 环境下不带 Secure，否则浏览器不会保存
 export function authCookie(token, { maxAge = 3600, secure = true } = {}) {
   const parts = [
-    `token=${encodeURIComponent(token)}`,
+    `${AUTH_COOKIE}=${encodeURIComponent(token)}`,
     'Path=/',
     'HttpOnly',
     'SameSite=Lax',
