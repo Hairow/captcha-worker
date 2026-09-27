@@ -17,6 +17,11 @@
   padding: 0;
 }
 
+/* 登录态校验完成前隐藏页面，避免未登录时闪现内容（HttpOnly Cookie 无法用内联脚本判断） */
+html.booting body {
+  visibility: hidden;
+}
+
 body {
   background: radial-gradient(1200px 600px at 80% -10%, #2b2340 0%, var(--bg) 55%);
   color: var(--text);

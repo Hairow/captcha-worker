@@ -21,6 +21,46 @@ export function bearerToken(request) {
   return auth.startsWith('Bearer ') ? auth.slice(7) : null
 }
 
+// 从 Cookie 解析 token（HttpOnly，JS 读不到，只能由浏览器自动携带）
+function cookieToken(request) {
+  const cookie = request.headers.get('Cookie') ?? ''
+  for (const part of cookie.split(';')) {
+    const idx = part.indexOf('=')
+    if (idx < 0) continue
+    if (part.slice(0, idx).trim() !== 'token') continue
+    try {
+      return decodeURIComponent(part.slice(idx + 1).trim())
+    } catch {
+      return null
+    }
+  }
+  return null
+}
+
+// 读取请求携带的 token：优先 Authorization（便于 curl / 非浏览器客户端），
+// 回退到 HttpOnly Cookie（浏览器前端走这条）
+export function readToken(request) {
+  return bearerToken(request) ?? cookieToken(request)
+}
+
+// 生成 Set-Cookie 值；localhost 等 http 环境下不带 Secure，否则浏览器不会保存
+export function authCookie(token, { maxAge = 3600, secure = true } = {}) {
+  const parts = [
+    `token=${encodeURIComponent(token)}`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+    `Max-Age=${maxAge}`,
+  ]
+  if (secure) parts.push('Secure')
+  return parts.join('; ')
+}
+
+// 清除登录 Cookie（同名 + 立即过期）
+export function clearAuthCookie({ secure = true } = {}) {
+  return authCookie('', { maxAge: 0, secure })
+}
+
 // 用 HMAC-SHA256 签名生成无状态 token：payload.signature
 export async function signToken(env, payload) {
   const key = await crypto.subtle.importKey(

@@ -1,4 +1,4 @@
-import { signToken, verifyToken, bearerToken } from './token.js'
+import { signToken, verifyToken, readToken, authCookie, clearAuthCookie } from './token.js'
 import { verifyTurnstile } from './turnstile.js'
 import { generateSlide, verifySlide } from './slide.js'
 
@@ -10,6 +10,8 @@ const API_HEADERS = {
 }
 
 const TOKEN_TTL_MS = 60 * 60 * 1000 // token 有效期 1 小时
+const TOKEN_TTL_SEC = Math.floor(TOKEN_TTL_MS / 1000)
+const AUTH_COOKIE = 'token' // HttpOnly：JS 读不到，防 XSS 窃取登录态
 
 // ---- 头像配置（R2 存储）----
 const AVATAR_MAX_BYTES = 2 * 1024 * 1024 // 单张图片上限 2MB
@@ -58,11 +60,27 @@ const USERS = {
   demo: { password: 'demo123', role: 'user' },
 }
 
-function json(data, status = 200) {
-  return new Response(JSON.stringify(data), {
-    status,
-    headers: API_HEADERS,
-  })
+// extra 用于附加 Set-Cookie 等响应头（append 而非覆盖，保证可多次设置）
+function json(data, status = 200, extra = null) {
+  const headers = new Headers(API_HEADERS)
+  for (const [key, value] of Object.entries(extra ?? {})) {
+    headers.append(key, value)
+  }
+  return new Response(JSON.stringify(data), { status, headers })
+}
+
+// Cookie 鉴权下的 CSRF 防护：浏览器发的写请求必须带同源 Origin
+// （SameSite=Lax 已挡掉大部分跨站场景，这里作为二次校验；
+//   curl 等不含 Origin 的非浏览器请求直接放行）
+function isSameOrigin(request) {
+  const origin = request.headers.get('Origin')
+  if (!origin) return true
+  return origin === new URL(request.url).origin
+}
+
+// 是否走 https（决定 Cookie 是否带 Secure；本地 http 不能带，否则浏览器不保存）
+function isSecure(request) {
+  return new URL(request.url).protocol === 'https:'
 }
 
 export default {
@@ -120,16 +138,25 @@ export default {
         role: user.role,
         exp: Date.now() + TOKEN_TTL_MS,
       }
-      return json({
-        token: await signToken(env, payload),
-        user: { username, role: user.role, avatarUrl: await avatarOf(env, username) },
-        expiresAt: new Date(payload.exp).toISOString(),
-      })
+      // token 只写入 HttpOnly Cookie，不放进响应体，前端 JS 拿不到
+      return json(
+        {
+          user: { username, role: user.role, avatarUrl: await avatarOf(env, username) },
+          expiresAt: new Date(payload.exp).toISOString(),
+        },
+        200,
+        { 'Set-Cookie': authCookie(await signToken(env, payload), { maxAge: TOKEN_TTL_SEC, secure: isSecure(request) }) }
+      )
     }
 
-    // 当前用户信息：GET /api/me（需 Bearer token）
+    // 退出登录：POST /api/logout（清除 HttpOnly Cookie）
+    if (request.method === 'POST' && path === '/api/logout') {
+      return json({ ok: true }, 200, { 'Set-Cookie': clearAuthCookie({ secure: isSecure(request) }) })
+    }
+
+    // 当前用户信息：GET /api/me（Cookie 自动携带；也兼容 Authorization: Bearer）
     if (request.method === 'GET' && path === '/api/me') {
-      const payload = await verifyToken(env, bearerToken(request))
+      const payload = await verifyToken(env, readToken(request))
       if (!payload) {
         return json({ error: '未登录或 token 已过期' }, 401)
       }
@@ -172,9 +199,12 @@ export default {
       return new Response(object.body, { status: 200, headers })
     }
 
-    // 头像上传：POST /api/avatar（需 Bearer token；multipart 字段 file，或直接发二进制 + 图片 Content-Type）
+    // 头像上传：POST /api/avatar（需登录；multipart 字段 file，或直接发二进制 + 图片 Content-Type）
     if (request.method === 'POST' && path === '/api/avatar') {
-      const payload = await verifyToken(env, bearerToken(request))
+      if (!isSameOrigin(request)) {
+        return json({ error: '跨站请求被拒绝' }, 403)
+      }
+      const payload = await verifyToken(env, readToken(request))
       if (!payload) {
         return json({ error: '未登录或 token 已过期' }, 401)
       }
@@ -227,9 +257,12 @@ export default {
       })
     }
 
-    // 头像删除：DELETE /api/avatar（需 Bearer token）
+    // 头像删除：DELETE /api/avatar（需登录）
     if (request.method === 'DELETE' && path === '/api/avatar') {
-      const payload = await verifyToken(env, bearerToken(request))
+      if (!isSameOrigin(request)) {
+        return json({ error: '跨站请求被拒绝' }, 403)
+      }
+      const payload = await verifyToken(env, readToken(request))
       if (!payload) {
         return json({ error: '未登录或 token 已过期' }, 401)
       }
@@ -305,7 +338,7 @@ export default {
       {
         error: 'Not Found',
         path,
-        hint: 'Available routes: /api, /api/login, /api/me, /api/avatar, /api/hello, /api/time, /api/echo, /api/slide/generate, /api/slide/verify',
+        hint: 'Available routes: /api, /api/login, /api/logout, /api/me, /api/avatar, /api/hello, /api/time, /api/echo, /api/slide/generate, /api/slide/verify',
       },
       404
     )

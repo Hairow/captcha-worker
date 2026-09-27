@@ -43,9 +43,26 @@ npm run dev
 | demo  | demo123  | user  |
 
 - 登录页集成 **Cloudflare Turnstile** 人机验证，验证通过后才允许登录。
-- 登录成功返回 HMAC 签名的 token（有效期 1 小时），前端存于 `localStorage`。
+- 登录成功下发 HMAC 签名的 token（有效期 1 小时），存放在 **HttpOnly Cookie**
+  （`token=...; Path=/; HttpOnly; SameSite=Lax`，https 下额外带 `Secure`）。
 - 可通过环境变量 `ADMIN_USERNAME` / `ADMIN_PASSWORD` 覆盖管理员账号；
   token 签名密钥通过 `JWT_SECRET` 设置（生产环境用 `wrangler secret put JWT_SECRET`）。
+
+## 登录态：HttpOnly Cookie
+
+token 不再写入 `localStorage`，避免页面脚本（XSS）直接窃取登录凭证：
+
+- `POST /api/login` 通过 `Set-Cookie` 下发 HttpOnly Cookie，**响应体不再返回 token**，
+  前端 JS 读不到也存不了；浏览器同源请求自动携带（`fetch` 默认 `credentials: 'same-origin'`）。
+- `POST /api/logout` 下发 `Max-Age=0` 的同名 Cookie 清除登录态。
+- 服务端读取顺序：`Authorization: Bearer <token>` → Cookie（`readToken()`）。
+  前者保留给 curl / 非浏览器客户端（可从登录响应的 `Set-Cookie` 中取 token）。
+- CSRF 防护：Cookie 为 `SameSite=Lax`，且写操作（`POST /api/avatar`、`DELETE /api/avatar`）
+  校验 `Origin` 是否同源，跨站请求返回 403。
+- 非敏感的用户信息（用户名/角色/头像）仍缓存在 `localStorage.user`，仅用于首屏快速渲染，
+  权限判断一律以服务端 token 为准。
+- 代价：JS 读不到 Cookie，原「内联脚本判断 token 立即跳转」的守卫失效，
+  改为 `<html class="booting">` 先隐藏页面 → `main.js` 请求 `/api/me` → 成功显示、401 跳登录页。
 
 ## Turnstile 配置
 
@@ -73,11 +90,12 @@ npm run dev
 | 方法 | 路径        | 说明                         |
 | ---- | ----------- | ---------------------------- |
 | GET  | `/api`      | 健康检查                     |
-| POST | `/api/login` | 登录，返回 token（`{ username, password, cfTurnstileToken }`）|
-| GET  | `/api/me`   | 当前用户信息（含 `avatarUrl`，需 `Authorization: Bearer <token>`）|
+| POST | `/api/login` | 登录（`{ username, password, cfTurnstileToken }`），token 通过 `Set-Cookie`（HttpOnly）下发 |
+| POST | `/api/logout` | 退出登录，清除 HttpOnly Cookie |
+| GET  | `/api/me`   | 当前用户信息（含 `avatarUrl`，需登录：Cookie 或 `Authorization: Bearer <token>`）|
 | GET  | `/api/avatar?username=x` | 读取头像图片（公开只读，支持 ETag/304）|
-| POST | `/api/avatar` | 上传头像（需 token；`multipart/form-data` 字段 `file`，或直接发二进制 + 图片 `Content-Type`）|
-| DELETE | `/api/avatar` | 删除自己的头像（需 token） |
+| POST | `/api/avatar` | 上传头像（需登录且同源；`multipart/form-data` 字段 `file`，或直接发二进制 + 图片 `Content-Type`）|
+| DELETE | `/api/avatar` | 删除自己的头像（需登录且同源） |
 | GET  | `/api/hello?name=x` | 返回问候语            |
 | GET  | `/api/time` | 返回服务器时间与访问地区     |
 | GET  | `/api/slide/generate` | 滑动验证码：生成背景图 + 拼图块两张 SVG 图片与一次性 token |

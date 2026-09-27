@@ -1,18 +1,12 @@
 <!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="booting">
 
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Captcha Worker · 前端演示</title>
-  <!-- 登录守卫（同步内联脚本）：在 body 渲染前执行，未登录立即跳转，避免页面闪现。
-       必须放在 main.js（module，defer 执行）之前 —— module 脚本要等 DOM 解析完才跑，
-       那时页面已经渲染出来了 -->
-  <script>
-    if (!localStorage.getItem('token')) {
-      location.replace('/login.html')
-    }
-  </script>
+  <!-- 登录态放在 HttpOnly Cookie 里，JS 读不到，因此守卫改为：
+       html 带 .booting 先隐藏内容 → main.js 请求 /api/me → 成功显示，401 则跳转登录页 -->
   <link rel="stylesheet" href="./style.css" />
   <script type="module" src="./main.js"></script>
 </head>

@@ -1,19 +1,14 @@
 const $ = (sel) => document.querySelector(sel)
 
-const token = localStorage.getItem('token')
-
+// 登录态在 HttpOnly Cookie 里：不需要（也无法）手动取 token，
+// 只需让浏览器自动携带 cookie（同源默认 same-origin）
 async function api(path, options = {}) {
-  const res = await fetch(`/api${path}`, options)
+  const res = await fetch(`/api${path}`, { credentials: 'same-origin', ...options })
   if (!res.ok) {
     const err = await res.json().catch(() => null)
     throw new Error(err?.error ?? `HTTP ${res.status}`)
   }
   return res.json()
-}
-
-// ---- 登录检查（守卫已提前到 index.html 内联脚本，这里兜底：token 失效/过期时同样跳转） ----
-if (!token) {
-  location.replace('/login.html')
 }
 
 const statusEl = $('#api-status')
@@ -30,10 +25,6 @@ const avatarTip = $('#avatar-tip')
 const avatarRemove = $('#btn-avatar-remove')
 const AVATAR_MAX_BYTES = 2 * 1024 * 1024
 let uploading = false
-
-function authHeaders(extra = {}) {
-  return { Authorization: `Bearer ${token}`, ...extra }
-}
 
 // 遮罩层：仅在「未上传」与「上传中」时出现，有头像时必须隐藏，否则会盖住图片
 function setMask(text) {
@@ -94,7 +85,6 @@ avatarInput.addEventListener('change', async () => {
     form.append('file', file)
     const data = await api('/avatar', {
       method: 'POST',
-      headers: authHeaders(),
       body: form,
     })
     showAvatar(data.avatarUrl)
@@ -112,7 +102,7 @@ avatarRemove.addEventListener('click', async () => {
   if (uploading) return
   uploading = true
   try {
-    await api('/avatar', { method: 'DELETE', headers: authHeaders() })
+    await api('/avatar', { method: 'DELETE' })
     showAvatar(null)
     saveUser({ avatarUrl: null })
     showTip('头像已移除', false)
@@ -136,30 +126,27 @@ function saveUser(patch) {
   if (cached) localStorage.setItem('user', JSON.stringify({ ...cached, ...patch }))
 }
 
-// 登录时已缓存用户信息（含头像），先立即渲染，避免头像区等待 /api/me
+// 登录时已缓存用户信息（含头像，非敏感），先立即渲染，避免头像区等待 /api/me
 const cachedUser = JSON.parse(localStorage.getItem('user') ?? 'null')
 if (cachedUser?.username) {
   renderUser(cachedUser)
-  userbox.hidden = false
 }
 
-// 校验 token 并获取最新用户信息（含头像地址）
+// 登录守卫：Cookie 由浏览器自动携带，401 即未登录/已过期
 try {
-  const data = await api('/me', {
-    headers: authHeaders(),
-  })
+  const data = await api('/me')
   renderUser(data.user)
   localStorage.setItem('user', JSON.stringify(data.user))
   userbox.hidden = false
+  document.documentElement.classList.remove('booting')
 } catch {
-  localStorage.removeItem('token')
   localStorage.removeItem('user')
   location.replace('/login.html')
 }
 
-// ---- 退出登录 ----
-$('#btn-logout').addEventListener('click', () => {
-  localStorage.removeItem('token')
+// ---- 退出登录：服务端清除 HttpOnly Cookie ----
+$('#btn-logout').addEventListener('click', async () => {
+  await fetch('/api/logout', { method: 'POST', credentials: 'same-origin' }).catch(() => {})
   localStorage.removeItem('user')
   location.href = '/login.html'
 })

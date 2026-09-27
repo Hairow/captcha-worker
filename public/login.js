@@ -29,10 +29,12 @@ const turnstileEl = $('#turnstile-container') // Turnstile 渲染容器
 let turnstileToken = null
 
 // ---- 登录态检查 ----
-// 本地已有 token 则直接回首页，避免重复登录
-if (localStorage.getItem('token')) {
-  location.href = '/'
-}
+// 登录态在 HttpOnly Cookie 中，JS 读不到，只能问服务端
+fetch('/api/me', { credentials: 'same-origin' })
+  .then((res) => {
+    if (res.ok) location.href = '/'
+  })
+  .catch(() => {})
 
 // ---- 初始化 Turnstile ----
 // 等待官方脚本加载完成（脚本 async defer，加载完成时间不确定，用轮询等待）
@@ -160,8 +162,7 @@ form.addEventListener('submit', async (e) => {
       throw new Error(`${data.error ?? '登录失败'}${codes}`)
     }
 
-    // 登录成功：持久化 token 与用户信息，跳回首页
-    localStorage.setItem('token', data.token)
+    // 登录成功：token 由服务端写入 HttpOnly Cookie，这里只缓存展示用的用户信息
     localStorage.setItem('user', JSON.stringify(data.user))
     location.href = '/'
   } catch (err) {
