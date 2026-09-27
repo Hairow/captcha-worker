@@ -23,7 +23,17 @@
       <div class="topbar">
         <span class="badge" id="api-status">正在连接 API…</span>
         <div class="userbox" id="userbox" hidden>
-          <span id="user-info"></span>
+          <label class="avatar" id="avatar-btn" title="点击上传头像（PNG/JPEG/WebP/GIF，≤2MB）">
+            <img id="avatar-img" alt="头像" hidden />
+            <span id="avatar-fallback">?</span>
+            <span class="avatar-mask" id="avatar-mask">上传中…</span>
+            <input id="avatar-input" type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden />
+          </label>
+          <div class="usermeta">
+            <span id="user-info"></span>
+            <span id="avatar-tip" class="tip"></span>
+          </div>
+          <button id="btn-avatar-remove" class="ghost" hidden>移除头像</button>
           <button id="btn-logout" class="ghost">退出登录</button>
         </div>
       </div>

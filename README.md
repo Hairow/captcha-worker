@@ -74,12 +74,36 @@ npm run dev
 | ---- | ----------- | ---------------------------- |
 | GET  | `/api`      | 健康检查                     |
 | POST | `/api/login` | 登录，返回 token（`{ username, password, cfTurnstileToken }`）|
-| GET  | `/api/me`   | 当前用户信息（需 `Authorization: Bearer <token>`）|
+| GET  | `/api/me`   | 当前用户信息（含 `avatarUrl`，需 `Authorization: Bearer <token>`）|
+| GET  | `/api/avatar?username=x` | 读取头像图片（公开只读，支持 ETag/304）|
+| POST | `/api/avatar` | 上传头像（需 token；`multipart/form-data` 字段 `file`，或直接发二进制 + 图片 `Content-Type`）|
+| DELETE | `/api/avatar` | 删除自己的头像（需 token） |
 | GET  | `/api/hello?name=x` | 返回问候语            |
 | GET  | `/api/time` | 返回服务器时间与访问地区     |
 | GET  | `/api/slide/generate` | 滑动验证码：生成背景图 + 拼图块两张 SVG 图片与一次性 token |
 | POST | `/api/slide/verify`  | 滑动验证码：校验位置与拖动轨迹（`{ token, x, y, track, duration }`）|
 | POST | `/api/echo` | 回显请求体（JSON）           |
+
+## 个人头像（R2 存储）
+
+`index.html` 右上角的用户区支持点击头像上传图片，图片存放在 **R2** 桶 `AVATARS`：
+
+- 存储 key：`avatars/<username>`，每个用户一个对象，重新上传直接覆盖。
+- 校验：仅允许 PNG / JPEG / WebP / GIF，单张 ≤ 2MB，并校验文件头魔数（防止伪装成图片的脚本被存进桶里）。
+- 读取：`GET /api/avatar?username=xxx`。`<img>` 无法携带 `Authorization`，因此该接口公开只读；URL 带 `t=<上传时间戳>` 用于上传后即时刷新（`Cache-Control: immutable` 一年），并支持 `If-None-Match` 返回 304。
+- 未上传头像时前端显示用户名首字符作为占位图。
+
+创建并绑定 R2 桶：
+
+```bash
+# 创建桶
+npx wrangler r2 bucket create captcha-worker-avatars
+
+# 部署（桶名已在 wrangler.jsonc 的 r2_buckets 中绑定为 env.AVATARS）
+npm run deploy
+```
+
+> 本地 `npm run dev` 使用 R2 本地模拟，状态保存在 `.wrangler/state`，无需真实桶。
 
 ## 滑动验证码
 

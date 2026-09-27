@@ -20,12 +20,103 @@ const statusEl = $('#api-status')
 const userbox = $('#userbox')
 const userInfo = $('#user-info')
 
-// 校验 token 并获取用户信息
+// ---- 头像（R2 存储）----
+const avatarBtn = $('#avatar-btn')
+const avatarImg = $('#avatar-img')
+const avatarFallback = $('#avatar-fallback')
+const avatarMask = $('#avatar-mask')
+const avatarInput = $('#avatar-input')
+const avatarTip = $('#avatar-tip')
+const avatarRemove = $('#btn-avatar-remove')
+const AVATAR_MAX_BYTES = 2 * 1024 * 1024
+let uploading = false
+
+function authHeaders(extra = {}) {
+  return { Authorization: `Bearer ${token}`, ...extra }
+}
+
+// 无头像时显示用户名首字符作为占位
+function showAvatar(url) {
+  if (url) {
+    avatarImg.src = url
+    avatarImg.hidden = false
+    avatarFallback.hidden = true
+    avatarRemove.hidden = false
+  } else {
+    avatarImg.removeAttribute('src')
+    avatarImg.hidden = true
+    avatarFallback.hidden = false
+    avatarRemove.hidden = true
+  }
+}
+
+function showTip(text, isError = true) {
+  avatarTip.textContent = text ?? ''
+  avatarTip.classList.toggle('error', Boolean(text) && isError)
+  avatarTip.classList.toggle('ok', Boolean(text) && !isError)
+}
+
+avatarImg.addEventListener('error', () => {
+  showAvatar(null)
+})
+
+avatarInput.addEventListener('change', async () => {
+  const file = avatarInput.files?.[0]
+  avatarInput.value = '' // 允许重复选择同一文件
+  if (!file || uploading) return
+
+  if (!file.type.startsWith('image/')) {
+    showTip('请选择图片文件')
+    return
+  }
+  if (file.size > AVATAR_MAX_BYTES) {
+    showTip('图片不能超过 2MB')
+    return
+  }
+
+  uploading = true
+  avatarMask.hidden = false
+  showTip('')
+  try {
+    const form = new FormData()
+    form.append('file', file)
+    const data = await api('/avatar', {
+      method: 'POST',
+      headers: authHeaders(),
+      body: form,
+    })
+    showAvatar(data.avatarUrl)
+    showTip('头像已更新', false)
+  } catch (err) {
+    showTip(err.message)
+  } finally {
+    avatarMask.hidden = true
+    uploading = false
+  }
+})
+
+avatarRemove.addEventListener('click', async () => {
+  if (uploading) return
+  uploading = true
+  try {
+    await api('/avatar', { method: 'DELETE', headers: authHeaders() })
+    showAvatar(null)
+    showTip('头像已移除', false)
+  } catch (err) {
+    showTip(err.message)
+  } finally {
+    uploading = false
+  }
+})
+
+// 校验 token 并获取用户信息（含头像地址）
 try {
   const data = await api('/me', {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: authHeaders(),
   })
   userInfo.textContent = `${data.user.username}（${data.user.role}）`
+  avatarFallback.textContent = data.user.username.slice(0, 1).toUpperCase()
+  showAvatar(data.user.avatarUrl)
   userbox.hidden = false
 } catch {
   localStorage.removeItem('token')

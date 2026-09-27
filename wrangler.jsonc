@@ -17,6 +17,15 @@
       "id": "6bb06530148947bc8e6eeba36201a535"
     }
   ],
+  // R2：用户头像存储（每个用户一个 key：avatars/<username>，上传即覆盖）
+  // 创建命令：npx wrangler r2 bucket create captcha-worker-avatars
+  // 本地 wrangler dev 会用本地模拟（状态保存在 .wrangler/state），无需真实桶
+  "r2_buckets": [
+    {
+      "binding": "AVATARS",
+      "bucket_name": "captcha-worker-avatars"
+    }
+  ],
   // 公开静态变量
   "vars": {
     "API_NAME": "captcha-worker-api"
