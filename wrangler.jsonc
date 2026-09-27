@@ -5,8 +5,9 @@
   // Workers Static Assets：托管 public 目录下的前端静态资源
   "assets": {
     "directory": "./public",
+    // 未命中的路径不做任何兜底，交给 Worker 统一返回 JSON 404
     // （可选值只有 single-page-application / 404-page / none）
-    "not_found_handling": "404-page",
+    "not_found_handling": "none",
     "html_handling": "none"
   },
   // KV：滑动验证码 token 存储（跨实例共享 + 按 TTL 自动过期）

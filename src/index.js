@@ -10,6 +10,9 @@ const API_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 }
 
+// 首页入口：assets 层不会把 / 解析成 index.html，需在 Worker 里显式重定向到它
+const HOME_PAGE = '/index.html'
+
 const TOKEN_TTL_MS = 60 * 60 * 1000 // token 有效期 1 小时
 const TOKEN_TTL_SEC = Math.floor(TOKEN_TTL_MS / 1000)
 // Cookie 名与读写逻辑统一在 src/token.js（AUTH_COOKIE）
@@ -63,6 +66,11 @@ export default {
     // 放在路由分发之前，新增接口自动生效，无需逐个加判断
     if (!SAFE_METHODS.has(request.method) && !CSRF_EXEMPT_PATHS.has(path) && !isSameOrigin(request)) {
       return json({ error: '跨站请求被拒绝' }, 403)
+    }
+
+    // 根路径重定向到首页（assets 优先且 not_found_handling = none，/ 不会命中任何静态文件）
+    if ((request.method === 'GET' || request.method === 'HEAD') && path === '/') {
+      return Response.redirect(new URL(HOME_PAGE, request.url).toString(), 302)
     }
 
     // 健康检查

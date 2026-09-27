@@ -34,7 +34,7 @@ npm install
 npm run dev
 ```
 
-浏览器打开 http://localhost:8787/index.html（未登录会自动跳转到登录页），使用演示账号登录（见下）。
+浏览器打开 http://localhost:8787（会 302 到 `/index.html`；未登录时再自动跳转登录页），使用演示账号登录（见下）。
 
 ## 登录
 
@@ -147,7 +147,11 @@ npm run deploy
 > Worker 里不再转发 `env.ASSETS.fetch()`，本地 dev 与生产行为保持一致。
 
 > `assets.not_found_handling` 已设为 `none`：未命中的路径不再回落到 `index.html`（SPA 模式），
-> 而是交给 Worker 返回 JSON 404。因此站点入口请用**显式路径** `/index.html`（`/` 不会被解析成首页）。
+> 而是交给 Worker 返回 JSON 404。
+>
+> 由此带来一个例外：**`/` 不会命中任何静态文件**（assets 不做目录索引），
+> 因此在 Worker 里加了根路由 `GET|HEAD /` → 302 跳转到 `/index.html`（常量 `HOME_PAGE`）。
+> 访问根域名会自动进首页，其余未匹配路径仍是 JSON 404。
 
 ## 登录成功后的落地页
 
