@@ -45,7 +45,7 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 
 // 公开演示接口：本来就是给任意来源调用的，豁免同源校验
 // （若确认这些接口只需要同源/非浏览器调用，删掉这两项即可全局强制）
-const CSRF_EXEMPT_PATHS = new Set(['/api/echo', '/api/slide/verify'])
+const CSRF_EXEMPT_PATHS = new Set(['/api/echo',])
 
 // 是否走 https（决定 Cookie 是否带 Secure；本地 http 不能带，否则浏览器不保存）
 function isSecure(request) {
