@@ -210,10 +210,8 @@ export default {
       })
     }
 
-    // 非 API 路径交给静态资源（public 目录）处理
-    if (!path.startsWith('/api') && env.ASSETS) {
-      return env.ASSETS.fetch(request)
-    }
+    // 静态资源由 Cloudflare 的 assets 层处理：命中的文件直接返回，不会进到这里
+    // （默认 assets 优先，只有 assets 未命中的请求才会进入 Worker）
 
     // 404 兜底
     return json(

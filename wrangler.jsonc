@@ -5,7 +5,8 @@
   // Workers Static Assets：托管 public 目录下的前端静态资源
   "assets": {
     "directory": "./public",
-    "not_found_handling": "single-page-application",
+    // （可选值只有 single-page-application / 404-page / none）
+    "not_found_handling": "404-page",
     "html_handling": "none"
   },
   // KV：滑动验证码 token 存储（跨实例共享 + 按 TTL 自动过期）

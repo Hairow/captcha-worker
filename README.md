@@ -30,11 +30,11 @@ captcha-worker/
 # 安装依赖
 npm install
 
-# 启动（前后端一体，http://localhost:8787）
+# 启动（前后端一体）
 npm run dev
 ```
 
-浏览器打开 http://localhost:8787 会自动跳转到登录页，使用演示账号登录（见下）。
+浏览器打开 http://localhost:8787/index.html（未登录会自动跳转到登录页），使用演示账号登录（见下）。
 
 ## 登录
 
@@ -141,7 +141,27 @@ npm run deploy
 
 > 局限说明：token 与缺口位置绑定存放在内存 Map，单实例演示足够；生产多实例部署建议改用 KV 存储。
 
-> 其他路径（如 `/`、`/login.html`）由静态资源自动托管；SPA 模式下未匹配路径回退到 `index.html`。
+> 静态资源（如 `/index.html`、`/login.html`、`/main.js`）由 assets 层直接托管，**优先级高于 Worker**：
+> 命中的文件立即返回，Worker 不执行；只有 assets 未命中的请求才进入 Worker。
+> `/api/*` 全部走 Worker，未匹配任何路由时返回统一的 JSON 404（含可用路由 hint）。
+> Worker 里不再转发 `env.ASSETS.fetch()`，本地 dev 与生产行为保持一致。
+
+> `assets.not_found_handling` 已设为 `none`：未命中的路径不再回落到 `index.html`（SPA 模式），
+> 而是交给 Worker 返回 JSON 404。因此站点入口请用**显式路径** `/index.html`（`/` 不会被解析成首页）。
+
+## 登录成功后的落地页
+
+登录成功后由前端直接跳转到首页常量 `HOME`（`public/login.js` 顶部），不做服务端下发、也不接受 `?redirect=` 参数：
+
+```js
+// assets.not_found_handling = none，目录路径不会自动解析到 index.html，故用显式文件
+const HOME = '/index.html'
+```
+
+- 要换落地页，只改这一处常量即可。
+- 登录页检测到已登录（`GET /api/me` 返回 200）时同样跳 `HOME`。
+- 首页未登录被拦截时跳转 `/login.html`，登录成功后进 `HOME`。
+- 不接受外部传入的跳转地址，天然不存在开放重定向问题。
 
 ## 测试
 

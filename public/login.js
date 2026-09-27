@@ -28,11 +28,15 @@ const turnstileEl = $('#turnstile-container') // Turnstile 渲染容器
 // 当前 Turnstile 验证 token；null 表示尚未完成验证（提交时会被拦截/重新触发）
 let turnstileToken = null
 
-// ---- 登录态检查 ----
+// 首页入口：写成显式文件而不是 /，因为 assets.not_found_handling = none，
+// 目录路径不会自动解析到 index.html
+const HOME = '/index.html'
+
+// 登录态检查
 // 登录态在 HttpOnly Cookie 中，JS 读不到，只能问服务端
 fetch('/api/me', { credentials: 'same-origin' })
   .then((res) => {
-    if (res.ok) location.href = '/'
+    if (res.ok) location.href = HOME
   })
   .catch(() => {})
 
@@ -164,7 +168,8 @@ form.addEventListener('submit', async (e) => {
 
     // 登录成功：token 由服务端写入 HttpOnly Cookie，这里只缓存展示用的用户信息
     localStorage.setItem('user', JSON.stringify(data.user))
-    location.href = '/'
+    // 登录成功：直接进首页
+    location.href = HOME
   } catch (err) {
     // 显示错误信息
     errorEl.textContent = err.message
