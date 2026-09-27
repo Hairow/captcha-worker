@@ -1,6 +1,7 @@
 import { signToken, verifyToken, readToken, authCookie, clearAuthCookie } from './token.js'
 import { verifyTurnstile } from './turnstile.js'
 import { generateSlide, verifySlide } from './slide.js'
+import { avatarOf, handleAvatarGet, handleAvatarUpload, handleAvatarDelete } from './avatar.js'
 
 const API_HEADERS = {
   'Content-Type': 'application/json; charset=utf-8',
@@ -12,47 +13,6 @@ const API_HEADERS = {
 const TOKEN_TTL_MS = 60 * 60 * 1000 // token 有效期 1 小时
 const TOKEN_TTL_SEC = Math.floor(TOKEN_TTL_MS / 1000)
 const AUTH_COOKIE = 'token' // HttpOnly：JS 读不到，防 XSS 窃取登录态
-
-// ---- 头像配置（R2 存储）----
-const AVATAR_MAX_BYTES = 2 * 1024 * 1024 // 单张图片上限 2MB
-// 允许的 MIME -> 文件魔数前缀（同时校验 Content-Type 与文件头，防止伪装扩展名）
-const AVATAR_TYPES = {
-  'image/png': [[0x89, 0x50, 0x4e, 0x47]],
-  'image/jpeg': [[0xff, 0xd8, 0xff]],
-  'image/webp': [[0x52, 0x49, 0x46, 0x46]], // RIFF....WEBP
-  'image/gif': [[0x47, 0x49, 0x46, 0x38]],
-}
-
-// 每个用户固定一个 key，重新上传直接覆盖，天然去重
-function avatarKey(username) {
-  return `avatars/${encodeURIComponent(username)}`
-}
-
-// 带时间戳参数，上传后可立刻绕过浏览器/边缘缓存拿到新图
-function avatarUrl(username, updatedAt) {
-  const base = `/api/avatar?username=${encodeURIComponent(username)}`
-  return updatedAt ? `${base}&t=${updatedAt}` : base
-}
-
-// 校验文件头是否真的是图片（避免把脚本/HTML 存进 R2 后被当作图片下发）
-async function isRealImage(file) {
-  const head = new Uint8Array(await file.slice(0, 12).arrayBuffer())
-  const sig = AVATAR_TYPES[file.type]
-  if (!sig) return false
-  if (!sig[0].every((b, i) => head[i] === b)) return false
-  // webp：前 4 字节 RIFF，第 8-11 字节必须是 WEBP
-  if (file.type === 'image/webp') {
-    return String.fromCharCode(...head.slice(8, 12)) === 'WEBP'
-  }
-  return true
-}
-
-// 查询用户头像地址；未上传或 R2 未配置时返回 null
-async function avatarOf(env, username) {
-  if (!env.AVATARS) return null
-  const head = await env.AVATARS.head(avatarKey(username))
-  return head ? avatarUrl(username, head.uploaded?.getTime?.() ?? Date.now()) : null
-}
 
 // 演示用户表（生产环境建议改为 KV/D1 存储，密码哈希保存）
 const USERS = {
@@ -71,12 +31,19 @@ function json(data, status = 200, extra = null) {
 
 // Cookie 鉴权下的 CSRF 防护：浏览器发的写请求必须带同源 Origin
 // （SameSite=Lax 已挡掉大部分跨站场景，这里作为二次校验；
-//   curl 等不含 Origin 的非浏览器请求直接放行）
+//   curl / 小程序等不含 Origin 的非浏览器请求直接放行）
 function isSameOrigin(request) {
   const origin = request.headers.get('Origin')
   if (!origin) return true
   return origin === new URL(request.url).origin
 }
+
+// 只读方法不做 CSRF 校验
+const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
+
+// 公开演示接口：本来就是给任意来源调用的，豁免同源校验
+// （若确认这些接口只需要同源/非浏览器调用，删掉这两项即可全局强制）
+const CSRF_EXEMPT_PATHS = new Set(['/api/echo', '/api/slide/verify'])
 
 // 是否走 https（决定 Cookie 是否带 Secure；本地 http 不能带，否则浏览器不保存）
 function isSecure(request) {
@@ -91,6 +58,12 @@ export default {
     // CORS 预检
     if (request.method === 'OPTIONS') {
       return new Response(null, { headers: API_HEADERS })
+    }
+
+    // CSRF 统一拦截：所有写请求（非 GET/HEAD/OPTIONS）必须同源，
+    // 放在路由分发之前，新增接口自动生效，无需逐个加判断
+    if (!SAFE_METHODS.has(request.method) && !CSRF_EXEMPT_PATHS.has(path) && !isSameOrigin(request)) {
+      return json({ error: '跨站请求被拒绝' }, 403)
     }
 
     // 健康检查
@@ -169,108 +142,18 @@ export default {
       })
     }
 
-    // 头像读取：GET /api/avatar?username=xxx（图片不能带 Authorization 头，故公开只读）
+    // ---- 头像（详见 src/avatar.js）----
+    // 读取公开只读：<img> 无法携带凭证；写操作由上方统一 CSRF 校验兜底
     if (request.method === 'GET' && path === '/api/avatar') {
-      const username = url.searchParams.get('username') ?? ''
-      if (!username) {
-        return json({ error: '缺少 username 参数' }, 400)
-      }
-      if (!env.AVATARS) {
-        return json({ error: 'R2 存储未配置，请在 wrangler.jsonc 绑定 AVATARS 桶' }, 503)
-      }
-
-      const object = await env.AVATARS.get(avatarKey(username))
-      if (!object) {
-        return json({ error: '该用户还没有上传头像' }, 404)
-      }
-
-      const immutable = url.searchParams.has('t')
-      const headers = new Headers({
-        'Content-Type': object.httpMetadata?.contentType ?? 'application/octet-stream',
-        'Content-Length': String(object.size),
-        'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : 'public, max-age=60',
-        'Access-Control-Allow-Origin': '*',
-      })
-      if (object.httpEtag) headers.set('ETag', object.httpEtag)
-      // 协商缓存：带上一次 ETag 时直接返回 304
-      if (object.httpEtag && request.headers.get('If-None-Match') === object.httpEtag) {
-        return new Response(null, { status: 304, headers })
-      }
-      return new Response(object.body, { status: 200, headers })
+      return handleAvatarGet(request, env)
     }
 
-    // 头像上传：POST /api/avatar（需登录；multipart 字段 file，或直接发二进制 + 图片 Content-Type）
     if (request.method === 'POST' && path === '/api/avatar') {
-      if (!isSameOrigin(request)) {
-        return json({ error: '跨站请求被拒绝' }, 403)
-      }
-      const payload = await verifyToken(env, readToken(request))
-      if (!payload) {
-        return json({ error: '未登录或 token 已过期' }, 401)
-      }
-      if (!env.AVATARS) {
-        return json({ error: 'R2 存储未配置，请在 wrangler.jsonc 绑定 AVATARS 桶' }, 503)
-      }
-
-      const contentType = (request.headers.get('Content-Type') ?? '').split(';')[0].trim()
-      let file = null
-      if (contentType === 'multipart/form-data') {
-        const form = await request.formData().catch(() => null)
-        file = form?.get('file') ?? form?.get('avatar')
-      } else {
-        // 兼容直接上传二进制：curl --data-binary @a.png -H 'Content-Type: image/png'
-        const bytes = await request.arrayBuffer()
-        file = new File([bytes], 'avatar', { type: contentType })
-      }
-
-      if (!file || typeof file.size !== 'number' || file.size === 0) {
-        return json({ error: '请选择要上传的图片' }, 400)
-      }
-      if (!AVATAR_TYPES[file.type]) {
-        return json({ error: '仅支持 PNG / JPEG / WebP / GIF 格式' }, 415)
-      }
-      if (file.size > AVATAR_MAX_BYTES) {
-        return json({ error: `图片不能超过 ${AVATAR_MAX_BYTES / 1024 / 1024}MB` }, 413)
-      }
-      if (!(await isRealImage(file))) {
-        return json({ error: '文件内容不是有效的图片' }, 415)
-      }
-
-      const updatedAt = Date.now()
-      await env.AVATARS.put(avatarKey(payload.username), await file.arrayBuffer(), {
-        httpMetadata: {
-          contentType: file.type,
-          cacheControl: 'public, max-age=31536000, immutable',
-        },
-        customMetadata: {
-          username: payload.username,
-          updatedAt: String(updatedAt),
-        },
-      })
-
-      return json({
-        ok: true,
-        avatarUrl: avatarUrl(payload.username, updatedAt),
-        updatedAt,
-        size: file.size,
-        contentType: file.type,
-      })
+      return handleAvatarUpload(request, env)
     }
 
-    // 头像删除：DELETE /api/avatar（需登录）
     if (request.method === 'DELETE' && path === '/api/avatar') {
-      if (!isSameOrigin(request)) {
-        return json({ error: '跨站请求被拒绝' }, 403)
-      }
-      const payload = await verifyToken(env, readToken(request))
-      if (!payload) {
-        return json({ error: '未登录或 token 已过期' }, 401)
-      }
-      if (!env.AVATARS) {
-        return json({ error: 'R2 存储未配置，请在 wrangler.jsonc 绑定 AVATARS 桶' }, 503)
-      }
-      await env.AVATARS.delete(avatarKey(payload.username))
-      return json({ ok: true })
+      return handleAvatarDelete(request, env)
     }
 
     // 问候接口

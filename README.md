@@ -10,6 +10,7 @@ captcha-worker/
 ├── src/token.js         # HMAC token 签名与校验
 ├── src/turnstile.js     # Cloudflare Turnstile 服务端校验
 ├── src/slide.js         # 滑动验证码（生成缺口位置/token + 服务端轨迹评分）
+├── src/avatar.js        # 头像 API（R2 存储：读取/上传/删除 + 图片校验）
 ├── wrangler.jsonc       # Worker 配置（含 assets 静态资源托管）
 ├── public/              # 前端静态资源（无需构建，直接部署）
 │   ├── index.html       # 首页（需登录）
@@ -57,8 +58,11 @@ token 不再写入 `localStorage`，避免页面脚本（XSS）直接窃取登�
 - `POST /api/logout` 下发 `Max-Age=0` 的同名 Cookie 清除登录态。
 - 服务端读取顺序：`Authorization: Bearer <token>` → Cookie（`readToken()`）。
   前者保留给 curl / 非浏览器客户端（可从登录响应的 `Set-Cookie` 中取 token）。
-- CSRF 防护：Cookie 为 `SameSite=Lax`，且写操作（`POST /api/avatar`、`DELETE /api/avatar`）
-  校验 `Origin` 是否同源，跨站请求返回 403。
+- CSRF 防护：Cookie 为 `SameSite=Lax`；同时在 `src/index.js` 路由分发之前做**统一拦截**——
+  所有写请求（非 `GET`/`HEAD`/`OPTIONS`）校验 `Origin` 是否同源，跨站返回 403，
+  新增接口自动生效。公开演示接口 `/api/echo`、`/api/slide/verify` 在 `CSRF_EXEMPT_PATHS` 中豁免
+  （如需全局强制，删掉这两项即可）。注意 `POST /api/login` 也在拦截范围内，
+  跨域部署前端时需把它加入豁免。
 - 非敏感的用户信息（用户名/角色/头像）仍缓存在 `localStorage.user`，仅用于首屏快速渲染，
   权限判断一律以服务端 token 为准。
 - 代价：JS 读不到 Cookie，原「内联脚本判断 token 立即跳转」的守卫失效，
