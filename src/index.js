@@ -45,6 +45,13 @@ async function isRealImage(file) {
   return true
 }
 
+// 查询用户头像地址；未上传或 R2 未配置时返回 null
+async function avatarOf(env, username) {
+  if (!env.AVATARS) return null
+  const head = await env.AVATARS.head(avatarKey(username))
+  return head ? avatarUrl(username, head.uploaded?.getTime?.() ?? Date.now()) : null
+}
+
 // 演示用户表（生产环境建议改为 KV/D1 存储，密码哈希保存）
 const USERS = {
   admin: { password: 'admin123', role: 'admin' },
@@ -115,7 +122,7 @@ export default {
       }
       return json({
         token: await signToken(env, payload),
-        user: { username, role: user.role },
+        user: { username, role: user.role, avatarUrl: await avatarOf(env, username) },
         expiresAt: new Date(payload.exp).toISOString(),
       })
     }
@@ -126,12 +133,11 @@ export default {
       if (!payload) {
         return json({ error: '未登录或 token 已过期' }, 401)
       }
-      const head = env.AVATARS ? await env.AVATARS.head(avatarKey(payload.username)) : null
       return json({
         user: {
           username: payload.username,
           role: payload.role,
-          avatarUrl: head ? avatarUrl(payload.username, head.uploaded?.getTime?.() ?? Date.now()) : null,
+          avatarUrl: await avatarOf(env, payload.username),
         },
       })
     }

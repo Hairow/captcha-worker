@@ -91,7 +91,8 @@ npm run dev
 - 存储 key：`avatars/<username>`，每个用户一个对象，重新上传直接覆盖。
 - 校验：仅允许 PNG / JPEG / WebP / GIF，单张 ≤ 2MB，并校验文件头魔数（防止伪装成图片的脚本被存进桶里）。
 - 读取：`GET /api/avatar?username=xxx`。`<img>` 无法携带 `Authorization`，因此该接口公开只读；URL 带 `t=<上传时间戳>` 用于上传后即时刷新（`Cache-Control: immutable` 一年），并支持 `If-None-Match` 返回 304。
-- 未上传头像时前端显示用户名首字符作为占位图。
+- 头像地址随「个人信息」一起下发：`/api/login` 与 `/api/me` 的 `user` 都带 `avatarUrl`（未上传为 `null`），前端存于 `localStorage.user`，首页进入时先用缓存立即渲染，再用 `/api/me` 刷新。
+- 已上传头像时遮罩层隐藏，直接显示图片；未上传时头像区显示用户名首字符 +「请上传头像」提示。
 
 创建并绑定 R2 桶：
 

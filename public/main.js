@@ -35,18 +35,30 @@ function authHeaders(extra = {}) {
   return { Authorization: `Bearer ${token}`, ...extra }
 }
 
-// 无头像时显示用户名首字符作为占位
+// 遮罩层：仅在「未上传」与「上传中」时出现，有头像时必须隐藏，否则会盖住图片
+function setMask(text) {
+  if (!text) {
+    avatarMask.hidden = true
+    return
+  }
+  avatarMask.textContent = text
+  avatarMask.hidden = false
+}
+
+// 显示头像；无头像时显示用户名首字符 + 「请上传头像」提示
 function showAvatar(url) {
   if (url) {
     avatarImg.src = url
     avatarImg.hidden = false
     avatarFallback.hidden = true
     avatarRemove.hidden = false
+    setMask(null)
   } else {
     avatarImg.removeAttribute('src')
     avatarImg.hidden = true
     avatarFallback.hidden = false
     avatarRemove.hidden = true
+    setMask('请上传头像')
   }
 }
 
@@ -75,7 +87,7 @@ avatarInput.addEventListener('change', async () => {
   }
 
   uploading = true
-  avatarMask.hidden = false
+  setMask('上传中…')
   showTip('')
   try {
     const form = new FormData()
@@ -86,11 +98,12 @@ avatarInput.addEventListener('change', async () => {
       body: form,
     })
     showAvatar(data.avatarUrl)
+    saveUser({ avatarUrl: data.avatarUrl })
     showTip('头像已更新', false)
   } catch (err) {
     showTip(err.message)
   } finally {
-    avatarMask.hidden = true
+    setMask(avatarImg.hidden ? '请上传头像' : null)
     uploading = false
   }
 })
@@ -101,6 +114,7 @@ avatarRemove.addEventListener('click', async () => {
   try {
     await api('/avatar', { method: 'DELETE', headers: authHeaders() })
     showAvatar(null)
+    saveUser({ avatarUrl: null })
     showTip('头像已移除', false)
   } catch (err) {
     showTip(err.message)
@@ -109,14 +123,33 @@ avatarRemove.addEventListener('click', async () => {
   }
 })
 
-// 校验 token 并获取用户信息（含头像地址）
+// 渲染用户信息（用户名 / 角色 / 头像）
+function renderUser(user) {
+  userInfo.textContent = `${user.username}（${user.role}）`
+  avatarFallback.textContent = user.username.slice(0, 1).toUpperCase()
+  showAvatar(user.avatarUrl)
+}
+
+// 同步更新本地缓存的用户信息，使「个人信息」里的头像与服务端一致
+function saveUser(patch) {
+  const cached = JSON.parse(localStorage.getItem('user') ?? 'null')
+  if (cached) localStorage.setItem('user', JSON.stringify({ ...cached, ...patch }))
+}
+
+// 登录时已缓存用户信息（含头像），先立即渲染，避免头像区等待 /api/me
+const cachedUser = JSON.parse(localStorage.getItem('user') ?? 'null')
+if (cachedUser?.username) {
+  renderUser(cachedUser)
+  userbox.hidden = false
+}
+
+// 校验 token 并获取最新用户信息（含头像地址）
 try {
   const data = await api('/me', {
     headers: authHeaders(),
   })
-  userInfo.textContent = `${data.user.username}（${data.user.role}）`
-  avatarFallback.textContent = data.user.username.slice(0, 1).toUpperCase()
-  showAvatar(data.user.avatarUrl)
+  renderUser(data.user)
+  localStorage.setItem('user', JSON.stringify(data.user))
   userbox.hidden = false
 } catch {
   localStorage.removeItem('token')
