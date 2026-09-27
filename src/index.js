@@ -16,8 +16,7 @@ const TOKEN_TTL_SEC = Math.floor(TOKEN_TTL_MS / 1000)
 
 // 演示用户表（生产环境建议改为 KV/D1 存储，密码哈希保存）
 const USERS = {
-  admin: { password: 'admin123', role: 'admin' },
-  demo: { password: 'demo123', role: 'user' },
+  admin: { password: 'admin&550859171', role: 'admin' },
 }
 
 // extra 用于附加 Set-Cookie 等响应头（append 而非覆盖，保证可多次设置）
