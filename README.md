@@ -28,10 +28,10 @@ captcha-worker/
 
 ```bash
 # 安装依赖
-npm install
+pnpm install
 
 # 启动（前后端一体）
-npm run dev
+pnpm run dev
 ```
 
 浏览器打开 http://localhost:8787（会 302 到 `/index.html`；未登录时再自动跳转登录页），使用演示账号登录（见下）。
@@ -120,13 +120,13 @@ token 不再写入 `localStorage`，避免页面脚本（XSS）直接窃取登�
 
 ```bash
 # 创建桶
-npx wrangler r2 bucket create captcha-worker-avatars
+pnpm exec wrangler r2 bucket create captcha-worker-avatars
 
 # 部署（桶名已在 wrangler.jsonc 的 r2_buckets 中绑定为 env.AVATARS）
-npm run deploy
+pnpm run deploy
 ```
 
-> 本地 `npm run dev` 使用 R2 本地模拟，状态保存在 `.wrangler/state`，无需真实桶。
+> 本地 `pnpm run dev` 使用 R2 本地模拟，状态保存在 `.wrangler/state`，无需真实桶。
 
 ## 滑动验证码
 
@@ -170,13 +170,13 @@ const HOME = '/index.html'
 ## 测试
 
 ```bash
-npm run test
+pnpm run test
 ```
 
 ## 部署
 
 ```bash
-npm run deploy
+pnpm run deploy
 ```
 
 一条命令即可将前端 + API 部署到 Cloudflare Workers，访问 `https://<worker>.workers.dev` 即可。

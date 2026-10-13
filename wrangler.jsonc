@@ -11,7 +11,7 @@
     "html_handling": "none"
   },
   // KV：滑动验证码 token 存储（跨实例共享 + 按 TTL 自动过期）
-  // 创建命令：npx wrangler kv namespace create SLIDE_KV
+  // 创建命令：pnpm exec wrangler kv namespace create SLIDE_KV
   // 然后把输出里的 id 填到下方；本地 wrangler dev 会用本地模拟，id 可先占位
   "kv_namespaces": [
     {
@@ -20,7 +20,7 @@
     }
   ],
   // R2：用户头像存储（每个用户一个 key：avatars/<username>，上传即覆盖）
-  // 创建命令：npx wrangler r2 bucket create captcha-worker-avatars
+  // 创建命令：pnpm exec wrangler r2 bucket create captcha-worker-avatars
   // 本地 wrangler dev 会用本地模拟（状态保存在 .wrangler/state），无需真实桶
   "r2_buckets": [
     {
